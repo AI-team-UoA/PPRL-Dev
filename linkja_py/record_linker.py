@@ -1,6 +1,6 @@
-from .bloom_filter_encoder import encode_string_to_bloom
-from .matcher import dice_coefficient
-from .pseudonymizer import pseudonymize
+from bloom_filter_encoder import encode_string_to_bloom
+from matcher import dice_coefficient
+from pseudonymizer import pseudonymize
 
 def compare_records(fields1, fields2, salt="", threshold=0.85, ngram=5):
     if len(fields1) != len(fields2):
