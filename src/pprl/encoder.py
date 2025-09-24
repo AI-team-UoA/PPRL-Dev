@@ -1,4 +1,4 @@
-from pprl.datamodel import PPRLFeature, Data
+from .datamodel import PPRLFeature, Data
 from bitarray import bitarray
 from typing import List, Literal, Union
 from rbloom import Bloom
@@ -15,7 +15,7 @@ class BloomFilter:
         qgrams : int = 5,
         pad : bool = True,
         salt : str = "",
-        num_hashes = 10,
+        num_hashes = 20,
         seeds : List[int] = None,
         attributes : List[str] = None,
     ):
@@ -30,6 +30,9 @@ class BloomFilter:
         self.seeds = seeds
         self.fields = attributes
         self.num_hashes = num_hashes
+        self.hash_seeds = seeds if seeds else range(num_hashes)
+        
+        self.attributes = attributes
         
     @staticmethod
     def record_to_string(row):
@@ -47,20 +50,24 @@ class BloomFilter:
             for seed in self.hash_seeds
         ]
     
-    def _encode_salted_string(self, df : pd.DataFrame):
+    def _encode_salted_string(self, df : pd.DataFrame) -> List[Bloom]:
+        bf_list : List[Bloom] = list()
         if self.attributes: 
             df: pd.DataFrame = df[self.attributes].apply(" ".join, axis=1)
         for _, row in df.iterrows(): 
-            salted = (self.salt + row).encode("utf-8")
+            row_string = row.values.tolist()[1:]
+            row_string = " ".join(row_string)
+            salted = (self.salt + row_string).encode("utf-8")
             hashed = hashlib.sha256(salted).hexdigest()
             hashed_qgram = hashed.lower().strip()
             bf = Bloom(self.size, false_positive_rate=self.error_rate)
             for i in range(len(hashed_qgram) - self.qgrams + 1):
                 bf.add(hashed_qgram[i:i+self.qgrams])
-       
-        return bf 
+            bf_list.append(bf)
+        return bf_list
     
-    def _encode_salted_qgrams(self, df: pd.DataFrame):
+    def _encode_salted_qgrams(self, df: pd.DataFrame) -> List[Bloom]:
+        bf_list : List[Bloom] = list()
         if self.attributes: 
             df: pd.DataFrame = df[self.attributes].apply(" ".join, axis=1) 
     
@@ -69,22 +76,24 @@ class BloomFilter:
             bf = Bloom(self.size, false_positive_rate=self.error_rate)
             for gram in self._qgrams(salted): 
                 bf.add(gram)
+            bf_list.append(bf)        
         
-        return bf
+        return bf_list
     
-    def _encode_seeded_qgrams(self, df: pd.DataFrame):
+    def _encode_seeded_qgrams(self, df: pd.DataFrame) -> List[bitarray]:
+        bf_list : List[bitarray] = list()
         if self.attributes: 
             df = df[self.attributes]
         
-        bits = bitarray(self.size) 
-        bits.setall(False)
         for _, row in df.iterrows():
+            bits = bitarray(self.size) 
+            bits.setall(False)
             salted = self.salt + row
             for gram in self._qgrams(salted): 
                 for idx in self._hashes(gram): 
                     bits[idx] = True
-        
-        return bits
+            bf_list.append(bits)
+        return bf_list
     
     def encode(self, data : Data) -> None:
         encoder_dict = { 
@@ -94,5 +103,5 @@ class BloomFilter:
         }
         encoder = encoder_dict[self.hashing_type]
         
-        self.bf_a = [encoder(data.dataset_1)]
-        self.bf_b = [encoder(data.dataset_2)]
+        self.bf_a = encoder(data.dataset_1)
+        self.bf_b = encoder(data.dataset_2)
