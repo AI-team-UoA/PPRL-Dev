@@ -8,6 +8,9 @@ from collections import defaultdict
 import nltk
 from nltk.corpus import stopwords
 import re
+from ordered_set import OrderedSet
+from typing import Dict
+from pybloom_live import BloomFilter as Bloom
 
 class PPRLFeature(ABC):
 
@@ -22,18 +25,18 @@ class PPRLFeature(ABC):
         self.tqdm_disable: bool
         self.data: Data
 
-    @abstractmethod
-    def _configuration(self) -> dict:
-        pass
+    # @abstractmethod
+    # def _configuration(self) -> dict:
+    #     pass
 
-    @abstractmethod
-    def evaluate(self,
-                 prediction=None,
-                 export_to_df: bool = False,
-                 export_to_dict: bool = False,
-                 with_classification_report: bool = False,
-                 verbose: bool = True) -> any:
-        pass
+    # @abstractmethod
+    # def evaluate(self,
+    #              prediction=None,
+    #              export_to_df: bool = False,
+    #              export_to_dict: bool = False,
+    #              with_classification_report: bool = False,
+    #              verbose: bool = True) -> any:
+    #     pass
     
     def method_configuration(self) -> dict:
         """Returns configuration details
@@ -175,7 +178,8 @@ class Data:
                 self._store_pairs()
         else:
             self.ground_truth = None
-
+        # self.bloom_filters : Dict[int, Dict[str, Bloom]] = None
+    
     def _store_pairs(self) -> None:
         """Creates a mapping:
             - pairs_of : ids of first dataset to ids of true matches from second dataset"""
@@ -359,3 +363,55 @@ class Data:
             print(average_words_per_line_2)
             
         return stats_df
+
+class Block:
+    """The main module used for storing entities in the blocking steps of pyjedai module. \
+        Consists of 2 sets of profile entities 1 for Dirty ER and 2 for Clean-Clean ER.
+    """
+    def __init__(self) -> None:
+        self.entities_D1: set = OrderedSet()
+        self.entities_D2: set = OrderedSet()
+
+    def get_cardinality(self, is_dirty_er) -> int:
+        """Returns block cardinality.
+
+        Args:
+            is_dirty_er (bool): Dirty or Clean-Clean ER.
+
+        Returns:
+            int: Cardinality
+        """
+        if is_dirty_er:
+            return len(self.entities_D1)*(len(self.entities_D1)-1)/2
+        return len(self.entities_D1) * len(self.entities_D2)
+
+    def get_size(self) -> int:
+        """Returns block size.
+
+        Returns:
+            int: Block size
+        """
+        return len(self.entities_D1) + len(self.entities_D2)
+
+    def verbose(self, key: any, is_dirty_er: bool) -> None:
+        """Prints contents of a block
+
+        Args:
+            key (any): Block key
+            is_dirty_er (bool): Dirty or Clean-Clean ER.
+        """
+        print("\nBlock ", "\033[1;32m"+key+"\033[0m", " has cardinality ", str(self.get_cardinality(is_dirty_er)) ," and contains entities with ids: ")
+        if is_dirty_er:
+            print("Dirty dataset: " + "[\033[1;34m" + \
+             str(len(self.entities_D1)) + " entities\033[0m]")
+            print(self.entities_D1)
+        else:
+            print("Clean dataset 1: " + "[\033[1;34m" + \
+             str(len(self.entities_D1)) + " entities\033[0m]")
+            print(self.entities_D1)
+            print("Clean dataset 2: " + "[\033[1;34m" + str(len(self.entities_D2)) + \
+            " entities\033[0m]")
+            print(self.entities_D2)
+    
+    def __str__(self): 
+        return f"D1: {self.entities_D1} D2: {self.entities_D2}"

@@ -4,17 +4,26 @@ from typing import List, Literal, Union, Dict, Generator
 from pybloom_live import BloomFilter as Bloom
 import pandas as pd
 import hashlib
+import re
+from metaphone import doublemetaphone
 
 
 
 # Differnece between errorate and multiple_hashes
 
 class BloomFilter:
+    VALID_HASHING_TYPES = [
+        "salted_string","salted_qgrams",
+        "salted_skipqgrams", "salted_metaphone",    
+        "salted_tokens"
+    ]        
 
     def __init__(self,
         size : int = 1024,
         error_rate : float = 0.001,
-        hashing_type : Literal["salted_string", "salted_qgrams"] = "salted_string", 
+        hashing_type : Literal["salted_string", "salted_qgrams", 
+                               "salted_skipqgrams", "salted_metaphone",
+                               "salted_tokens"] = "salted_string", 
                             #    "seeded_qgrams"] 
         qgrams : int = 5,
         pad : bool = False,
@@ -27,8 +36,16 @@ class BloomFilter:
         encoder_dict = { 
             "salted_string" : self._salted_string,
             "salted_qgrams" : self._salted_qgrams,
-            # "seeded_qgrams" : self._seeded_qgrams
+            "salted_skipqgrams" : self._salted_skipqgrams,
+            "salted_metaphone" : self._salted_metaphone,    
+            "salted_tokens" : self._salted_token,        
         }
+        
+        if hashing_type not in self.VALID_HASHING_TYPES:
+            raise KeyError(
+                f"Invalid hashing_type '{hashing_type}'. "
+                f"Allowed values are: {', '.join(self.VALID_HASHING_TYPES)}"
+            )
         
         self.bf_a : Union[List[bitarray], List[Bloom]] = None
         self.bf_b : Union[List[bitarray], List[Bloom]] = None
@@ -43,7 +60,7 @@ class BloomFilter:
         # self.num_hashes = num_hashes
         # self.hash_seeds = seeds if seeds else range(num_hashes)
         self.attributes = attributes
-        
+        self.print = False
         self._hash = encoder_dict[hashing_type] 
         
     @staticmethod
@@ -67,6 +84,7 @@ class BloomFilter:
         if self.attributes: 
             for attribute in self.attributes: 
                 bloom_dict[attribute] = self._hash(str(row[attribute]))
+            self.print = False
         else: 
             flatten_row : list = row.values.tolist()
             flatten_row = " ".join(str(x) for x in flatten_row) 
@@ -90,17 +108,87 @@ class BloomFilter:
         hashed_qgram = hashed.lower().strip()
         bf = Bloom(capacity=self.size, error_rate=self.error_rate)
         for i in range(len(hashed_qgram) - self.qgrams + 1):
+            if self.print:
+                print(hashed_qgram[i:i+self.qgrams]) 
             bf.add(hashed_qgram[i:i+self.qgrams])
         return bf
         
     def _salted_qgrams(self, str_to_enc: str) -> Bloom:
-        str_to_enc = str_to_enc.encode("utf-8")
         bf = Bloom(capacity=self.size, error_rate=self.error_rate)
-        for i in range(len(str_to_enc) - self.qgrams + 1):
-            salted_gram = self.salt + str_to_enc[i:i+self.qgrams].encode('utf-8') 
-            gram = hashlib.sha256(salted_gram).hexdigest()
-            bf.add(gram)
+        tokens = self._tokenize(str_to_enc)
+        for tok in tokens: 
+            salted_token = (self.salt + tok).encode("utf-8")
+            for i in range(len(salted_token) - self.qgrams + 1):
+                salted_gram = salted_token[i:i+self.qgrams] 
+                gram = hashlib.sha256(salted_gram).hexdigest()
+                bf.add(gram)
         return bf
+
+    def _salted_skipqgrams(self, str_to_enc: str) -> Bloom:
+        """" Gets two different strings one without the chars in the odd positions and ove without the even ones.
+        If the string is shorter of qgrams, # is added for creating the qgrams """
+    
+        bf = Bloom(capacity=self.size, error_rate=self.error_rate)
+        
+        tokens = self._tokenize(str_to_enc)
+        for tok in tokens: 
+            salted_tok = (self.salt + tok) 
+            skipped_tokens = [salted_tok[1::2], salted_tok[::2]]
+            for skipped_tok in skipped_tokens:
+                adjusted_token = skipped_tok.ljust(self.qgrams, '#')
+                
+                for i in range(len(adjusted_token) - self.qgrams + 1):
+                    gram = adjusted_token[i:i+self.qgrams]
+                    if self.print:
+                        print(gram)
+                    gram = gram.encode('utf-8')
+                    gram = hashlib.sha256(gram).hexdigest()
+                    bf.add(gram)
+
+        return bf
+
+    def _salted_metaphone(self, str_to_enc: str) -> Bloom:
+        """" Hashes metaphone if it exists else hashes token """
+    
+        bf = Bloom(capacity=self.size, error_rate=self.error_rate)
+        tokens = self._tokenize(str_to_enc)
+        for tok in tokens: 
+            salted_tok = (self.salt + tok) 
+            double_metaphone = doublemetaphone(salted_tok)
+            
+            if len(double_metaphone[0]) == 0 and len(double_metaphone[1])  == 0: 
+                if self.print: 
+                    print(tok)
+                hashed = hashlib.sha256(tok.encode('utf-8')).hexdigest()
+                bf.add(hashed)
+                continue
+            
+            for metaphone in double_metaphone:
+                if self.print: 
+                    print(metaphone)
+                hashed = hashlib.sha256(metaphone.encode('utf-8')).hexdigest()
+                bf.add(hashed)
+
+        return bf
+    
+    
+    def _salted_token(self, str_to_enc: str) -> Bloom:
+        """" Hashes metaphone if it exists else hashes token """
+    
+        bf = Bloom(capacity=self.size, error_rate=self.error_rate)
+        tokens = self._tokenize(str_to_enc)
+        for tok in tokens: 
+            salted_tok = (self.salt + tok).encode('utf-8') 
+            if self.print: 
+                print(tok)
+            hashed = hashlib.sha256(salted_tok).hexdigest()
+            bf.add(hashed)
+
+        return bf
+
+
+    def  _tokenize(self, str_to_enc : str) -> List:
+        return list(set(filter(None, re.split('[\\W_]', str_to_enc.lower()))))
     
     # def _encode_seeded_qgrams(self, df: pd.DataFrame) -> List[bitarray]:
     #     bf_list : List[bitarray] = list()
@@ -131,6 +219,9 @@ class BloomFilter:
             upperset : set = set(columns_1) if len(set(columns_1)) > len(set(columns_2)) else set(columns_2)
             subset : set = set(columns_1) if len(set(columns_1)) <= len(set(columns_2)) else set(columns_2)
             self.attributes = list(subset) if subset.issubset(upperset) else None
-
-        return self._encode()
+        print(self.attributes)
+        bloom_filters = self._encode()
+        # data.bloom_filters = bloom_filters
+        
+        return bloom_filters
         
