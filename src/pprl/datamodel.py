@@ -372,8 +372,7 @@ class Block:
         Consists of 2 sets of profile entities 1 for Dirty ER and 2 for Clean-Clean ER.
     """
     def __init__(self) -> None:
-        self.entities_D1: set = OrderedSet()
-        self.entities_D2: set = OrderedSet()
+        self.entities : Dict[str, OrderedSet] = defaultdict(OrderedSet)
 
     def get_cardinality(self, is_dirty_er) -> int:
         """Returns block cardinality.
@@ -417,7 +416,8 @@ class Block:
             print(self.entities_D2)
     
     def __str__(self): 
-        return f"D1: {self.entities_D1} D2: {self.entities_D2}"
+        return f"{dict(self.entities)}"
+    # f"D1: {self.entities_D1} D2: {self.entities_D2}"
     
 class EncodedData(ABC): 
     encoded_dict: Dict[int, Dict[str, any]]
@@ -444,15 +444,15 @@ class BloomEncodedData(EncodedData):
             self.length = length
             self.encoded_dict : Dict[int, Dict[str, Bloom]] = data
             if self.encoded_dict:
-                self.bittaray_dict = dict()
+                self.bitarray_dict : Dict[int, Dict[str, bitarray]] = dict()
                 for key, value in self.encoded_dict.items(): 
-                    self.bittaray_dict[key] = dict()
-                    for attr, indices in self.encoded_dict[key].items():
+                    self.bitarray_dict[key] = dict()
+                    for attr, indices in value.items():
                         b = bitarray(length)
                         b.setall(0)
                         if indices: 
                             b[indices] = True            
-                        self.bittaray_dict[key][attr] = b
+                        self.bitarray_dict[key][attr] = b
                             
                 first_attr = next(iter(self.encoded_dict.values()), {})
                 if first_attr:
@@ -491,8 +491,8 @@ class BloomEncodedData(EncodedData):
                     offset = len(ret.encoded_dict)
                     ret.encoded_dict = {**ret.encoded_dict, 
                                 **{key + offset :  value for key, value in obj.encoded_dict.items()} }
-                    ret.bittaray_dict = {**ret.bittaray_dict, 
-                                **{key + offset :  value for key, value in obj.bittaray_dict.items()} }
+                    ret.bitarray_dict = {**ret.bitarray_dict, 
+                                **{key + offset :  value for key, value in obj.bitarray_dict.items()} }
                     ret.dataset_indexes[dataset_num] = (offset, len(ret.encoded_dict)-1)
 
             dataset_num += 1

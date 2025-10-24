@@ -19,41 +19,41 @@ from src.pprl.matching import Matcher
     
 
 if __name__ == '__main__':
-    path = "data/test" 
-    d1 = pd.read_csv(f"{path}/test1.csv")
-    bl = BloomFilter(size=2048,
-                num_hashes = 100,
+    path = "data/test/ccer" 
+    d1 = pd.read_csv(f"{path}/abt_100.csv", sep ='|')
+    # print(d1)
+    bl = BloomFilter(size=1024,
+                num_hashes = 20,
                 offset = 0,
                 qgrams=2,
-                hashing_type="salted_metaphone")
+                hashing_type="salted_qgrams")
 
     bloom_filters : BloomEncodedData = bl.encode(d1)
-    # print(bloom_filters)
+    # # print(bloom_filters)
     bloom_filters.to_file('bloom_1.pkl')
     
-    # new_bloom = BloomEncodedData.from_file('bloom_1.pkl')
+    # # new_bloom = BloomEncodedData.from_file('bloom_1.pkl')
 
-    # print(new_bloom)
-    d2 = pd.read_csv(f"{path}/test2.csv")
+    # # print(new_bloom)
+    d2 = pd.read_csv(f"{path}/buy_100.csv", sep='|')
     bloom_filters : BloomEncodedData = bl.encode(d2)
     bloom_filters.to_file('bloom_2.pkl')
 
     
     new_bloom = BloomEncodedData.from_file('bloom_1.pkl', 'bloom_2.pkl')
-    # print(new_bloom.bittaray_dict)
+    print(new_bloom.dataset_indexes)
     
     # exit(10)
     
     # print('\n', bloom_filters)
 
     
-    blocker = LSHBlocker(psi=32, lmbda=10)
+    blocker = BitBlocker(psi=32, lmbda=10)
     blocks : Dict[str, Block]= blocker.build_blocks(new_bloom)
     
     for key, block in blocks.items():
         print(key, block) 
 
-    exit(10)
     matcher = Matcher(batch_size=1, threshold=1.0, metric='scm')
     graph : Graph = matcher.predict(data, encoded_data=bloom_filters)
 

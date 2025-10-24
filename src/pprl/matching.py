@@ -47,7 +47,7 @@ class Matcher:
         return candidates, unique_ids
     
     @overload
-    def predict(self, data: Data,
+    def predict(self,
             encoded_data: HomomorphicEcnodedData,
             blocks : Dict[str, Block] = None, 
             type_of_match: Literal['overlap', 'extension'] = 'overlap',
@@ -66,7 +66,7 @@ class Matcher:
         ...
        
     @overload        
-    def predict(self, data: Data, 
+    def predict(self, 
                 encoded_data : BloomEncodedData,
                 blocks: Dict[str, Block] = None)  -> Graph: 
         """
@@ -83,12 +83,11 @@ class Matcher:
         ... 
         
         
-    def predict(self, data: Data,
+    def predict(self,
                 encoded_data: EncodedData, 
                 blocks: Dict[str, Block] = None, 
                 **kwargs) -> Graph: 
 
-        self.data = data
         self.candidates, self.unique_ids = self._candidates(blocks) if blocks else self._candidates(encoded_data)
 
         if not self.candidates:

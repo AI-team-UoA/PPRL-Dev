@@ -1,8 +1,13 @@
 import numpy as np
 from typing import List
-
+from src.pprl.datamodel import Block
 
 # Dice coefficient: 2 * |A ∩ B| / (|A| + |B|)
+def _drop_single_entity_blocks(blocks : dict[Block]) -> dict: 
+    return dict(filter(lambda e: not _block_with_one_entity(e[1]), blocks.items()))
+
+def _block_with_one_entity(block : Block) -> bool: 
+    return True if len(block.entities) == 1 else False
 
 def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> float: 
     return float(2 * (intersecntion) / (cadinality_a + cardinality_b))
