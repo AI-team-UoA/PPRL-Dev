@@ -1,78 +1,82 @@
 from src.pprl.encoder import BloomFilter
-from src.pprl.datamodel import Data
+from src.pprl.datamodel import Data, Block, BloomEncodedData
+from typing import Dict
 import itertools
 import pandas as pd
-from rbloom import Bloom
-from src.pprl.blocking import LSHBlocker
+from src.pprl.blocking import LSHBlocker, BitBlocker
+from ordered_set import OrderedSet
+import numpy as np
+from typing import List, Tuple
 import bitarray
+from networkx import Graph
+from src.pprl.matching import Matcher
+
+
 # # Helper to generate random strings
 # def random_string(length=10):
 #     return ''.join(random.choice(string.ascii_letters) for _ in range(length))
 
     
-def dice_coefficient(bf1: Bloom, bf2:Bloom):
-    intersection = (bf1 & bf2)
-    return 2 * intersection.approx_items / (bf1.approx_items + bf2.approx_items)
-
 
 if __name__ == '__main__':
     path = "data/test" 
     d1 = pd.read_csv(f"{path}/test1.csv")
-    d2 = pd.read_csv(f"{path}/test2.csv")
-    print(type(d1['id'][0]))
-    data = Data(dataset_1=d1, dataset_2=d2, id_column_name_1='id', id_column_name_2='id')
+    bl = BloomFilter(size=2048,
+                num_hashes = 100,
+                offset = 0,
+                qgrams=2,
+                hashing_type="salted_metaphone")
 
-    bl = BloomFilter(size=1000, qgrams=2, hashing_type="salted_string")
-    bloom_filters = bl.encode(data)
-    
+    bloom_filters : BloomEncodedData = bl.encode(d1)
     # print(bloom_filters)
+    bloom_filters.to_file('bloom_1.pkl')
     
+    # new_bloom = BloomEncodedData.from_file('bloom_1.pkl')
+
+    # print(new_bloom)
+    d2 = pd.read_csv(f"{path}/test2.csv")
+    bloom_filters : BloomEncodedData = bl.encode(d2)
+    bloom_filters.to_file('bloom_2.pkl')
+
     
+    new_bloom = BloomEncodedData.from_file('bloom_1.pkl', 'bloom_2.pkl')
+    # print(new_bloom.bittaray_dict)
     
-    if attributes: 
-        for id, (_, row) in enumerate(d1.iterrows()): 
-            print(id)
-            for attribute in attributes:
-                print(f"type: {type(row[attribute])} row: {row[attribute]}")                    
+    # exit(10)
     
+    # print('\n', bloom_filters)
+
+    
+    blocker = LSHBlocker(psi=32, lmbda=10)
+    blocks : Dict[str, Block]= blocker.build_blocks(new_bloom)
+    
+    for key, block in blocks.items():
+        print(key, block) 
+
     exit(10)
-    bl.encode(data)
-    # print(len(bl.bf_a))
-    # for bf1 in bl.bf_a: 
-    #     for bf2 in bl.bf_b: 
-    #         score = dice_coefficient(bf1, bf2) 
-    #         print(f"matching {score}")
+    matcher = Matcher(batch_size=1, threshold=1.0, metric='scm')
+    graph : Graph = matcher.predict(data, encoded_data=bloom_filters)
 
-    bf1 = bl.bf_a
-    bf2 = bl.bf_b
+    # TO DO : Add extract pairs and evaluation
+    pairs_list = list()   
+    for edge in graph.edges:
+        node1, node2 = edge
+        if node1 < data.dataset_limit:
+            id1 = data._gt_to_ids_reversed_1[node1]
+            id2 = data._gt_to_ids_reversed_2[node2]
+        
+        else:
+            id1 = data._gt_to_ids_reversed_1[node2]
+            id2 = data._gt_to_ids_reversed_2[node1]
 
-    blocker = LSHBlocker(psi=1, lmbda=10)
-    blocker.fit(bf1 + bf2)
+        pairs_list.append((id1, id2))
+
     
-    blocks_a = blocker.block_all(bf1)
-    blocks_b = blocker.block_all(bf2)
-
-    print(blocks_a)
-    print(blocks_b)
+    pairs_df = pd.DataFrame(pairs_list, columns=['id1', 'id2'])
     
-    candidates = set()
-    for key in blocks_a:
-        ids_a = blocks_a.get(key, [])
-        ids_b = blocks_b.get(key, [])
-        for i, j in itertools.product(ids_a, ids_b):
-            candidates.add((i, j))
-    print(candidates)
-    
-    def dice_sim(b1: bitarray, b2: bitarray) -> float:
-        inter = (b1 & b2).count()
-        return (2 * inter) / (b1.count() + b2.count()) if (b1.count() + b2.count()) else 0.0
-
-    sim_scores = [(i, j, dice_sim(bf1[i], bf2[j])) for i, j in candidates]
-    print(sim_scores)
-    # blocking = LSHBlocker
-
-
-
+    print(pairs_df)
+    exit(10)
+   
 """ MATCHING """
 
 # def dice_coefficient(bf1: BloomFilter, bf2:BloomFilter):

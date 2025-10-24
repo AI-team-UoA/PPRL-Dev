@@ -4,7 +4,7 @@ from bitarray import bitarray
 from collections import defaultdict
 from typing import List, Dict, Union
 from pybloom_live import BloomFilter as Bloom  
-from src.pprl.datamodel import Data, Block, PPRLFeature
+from src.pprl.datamodel import Data, Block, PPRLFeature, BloomEncodedData
 import time
 from abc import abstractmethod
 
@@ -108,8 +108,7 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         
     def build_blocks(
             self,
-            data: Data,
-            bloom_filters: Dict[int, Dict[str, Bloom]],
+            encoded_data: BloomEncodedData,
             attributes : List[str] = None,
     ) -> Dict[Union[str, int], Block]:
         """Main method of Blocking in a dataset
@@ -127,10 +126,12 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         """
 
         _start_time = time.time()
-        self.data = data
-
-        _, first_bloom_filters = next(iter(bloom_filters.items()))
-        bloom_attributes = list(first_bloom_filters.keys())
+        self.encoded_data = encoded_data
+       
+       
+        # self.data = data
+        
+        bloom_attributes = encoded_data.attributes
 
         if attributes:
             if set(attributes) > set(bloom_attributes): 
@@ -145,13 +146,13 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         # )
         
         
-        self._fit(bloom_filters)
+        self._fit(encoded_data.bittaray_dict)
 
         blocks = defaultdict(Block)
-        for idx, bloom_dict in bloom_filters.items():
-            for _, bloom in bloom_dict.items():
-                for key in self._block_record(bloom.bitarray):
-                    if idx < self.data.dataset_limit: 
+        for idx, bitarray_dict in encoded_data.bittaray_dict.items():
+            for _, bit_array in bitarray_dict.items():
+                for key in self._block_record(bit_array):
+                    if idx < encoded_data.dataset_limit: 
                         blocks[str(key)].entities_D1.add(idx)
                     else: 
                         blocks[str(key)].entities_D2.add(idx)
@@ -192,7 +193,7 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         )
 
     @abstractmethod
-    def _fit(self, bloom_filters: dict) -> None: 
+    def _fit(self, bitarray_dict: dict) -> None: 
         pass
 
     @abstractmethod
@@ -258,11 +259,11 @@ class LSHBlocker(AbstractBlockBuilding):
             raise ValueError("Not enough bit positions after pruning")
         return candidates
 
-    def _fit(self, bloom_filters : Dict[int, Dict[str, Bloom]]):
+    def _fit(self, bitarray_dict : Dict[int, Dict[str, bitarray]]):
 
         bitarray_list: List[bitarray] = [
-            bloom.bitarray for bloom_dict in bloom_filters.values()
-            for bloom in bloom_dict.values()
+            bitarray for bitarrays in bitarray_dict.values()
+            for bitarray in bitarrays.values()
         ]
         """Initialize blocker by sampling to prune and selecting usable bit positions."""
         self.rng = random.Random(self.seed)
@@ -321,26 +322,3 @@ class BitBlocker(AbstractBlockBuilding):
 
 
 ## JACCARD BLOCKER (?)
-
-class ContinuousBlocker(AbstractBlockBuilding):
-
-    def __init__(self, 
-            radius : float = 0.5):
-        super().__init__()
-        if radius <= 0.0:
-            raise ValueError(f"radius must be positive number : {radius}")
-        self.radius = radius
-
-
-
-    def _fit(self, bloom_filters: Dict[int, Dict[str, Bloom]]) -> None:
-        return         
-    
-    def _block_record(self, bf: bitarray) -> List[int]:
-        block_keys = list()
-        for i, table_indices in enumerate(self.hash_indices):
-            vals = map(bf.__getitem__, table_indices)
-            table_block = sum(b << j for j, b in enumerate(vals))
-            block_keys.append(table_block * len(self.hash_indices) + i)
-
-        return block_keys

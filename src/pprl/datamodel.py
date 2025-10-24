@@ -9,8 +9,11 @@ import nltk
 from nltk.corpus import stopwords
 import re
 from ordered_set import OrderedSet
-from typing import Dict
+from typing import Dict, List, Tuple
 from pybloom_live import BloomFilter as Bloom
+import pickle
+from bitarray import bitarray 
+
 
 class PPRLFeature(ABC):
 
@@ -415,3 +418,101 @@ class Block:
     
     def __str__(self): 
         return f"D1: {self.entities_D1} D2: {self.entities_D2}"
+    
+class EncodedData(ABC): 
+    encoded_dict: Dict[int, Dict[str, any]]
+    
+    
+    @abstractmethod
+    def to_file(self, filename: str):
+        pass
+    
+    @classmethod
+    @abstractmethod
+    def from_file(self, *kwargs): 
+        pass
+
+    
+
+class BloomEncodedData(EncodedData): 
+
+    dataset_indexes : Dict[int, Tuple[int, int]]
+    dataset_limit : int 
+
+    def __init__(self, data: Dict[int, Dict[str, List[int]]] = None, length: int = 0):
+        if data: 
+            self.length = length
+            self.encoded_dict : Dict[int, Dict[str, Bloom]] = data
+            if self.encoded_dict:
+                self.bittaray_dict = dict()
+                for key, value in self.encoded_dict.items(): 
+                    self.bittaray_dict[key] = dict()
+                    for attr, indices in self.encoded_dict[key].items():
+                        b = bitarray(length)
+                        b.setall(0)
+                        if indices: 
+                            b[indices] = True            
+                        self.bittaray_dict[key][attr] = b
+                            
+                first_attr = next(iter(self.encoded_dict.values()), {})
+                if first_attr:
+                    self.attributes = list(first_attr.keys())
+
+    def __str__(self): 
+        return f'{self.encoded_dict}'      
+
+    def __getstate__(self):
+        """Customize what gets pickled."""
+        state = self.__dict__.copy()
+        return state
+
+    def __setstate__(self, state):
+        """Customize how to restore from pickle."""
+        self.__dict__.update(state)
+
+
+    def to_file(self, filename:str) : 
+        with open(filename, "wb+") as f:
+            pickle.dump(self, f)
+
+    @classmethod
+    def from_file(cls, *filenames) -> "BloomEncodedData": 
+        """Load a new instance from file."""
+        ret : BloomEncodedData = None
+        dataset_num = 0
+        for filename in filenames:
+            with open(filename, "rb") as f:
+                obj : BloomEncodedData = pickle.load(f)
+                if not ret: 
+                    ret = obj
+                    ret.dataset_indexes = dict()                   
+                    ret.dataset_indexes[dataset_num] = (0, len(ret.encoded_dict)-1)
+                else: 
+                    offset = len(ret.encoded_dict)
+                    ret.encoded_dict = {**ret.encoded_dict, 
+                                **{key + offset :  value for key, value in obj.encoded_dict.items()} }
+                    ret.bittaray_dict = {**ret.bittaray_dict, 
+                                **{key + offset :  value for key, value in obj.bittaray_dict.items()} }
+                    ret.dataset_indexes[dataset_num] = (offset, len(ret.encoded_dict)-1)
+
+            dataset_num += 1
+            
+        if dataset_num == 2: 
+            ret.dataset_limit = offset
+        
+        return ret
+     
+
+    
+
+
+class HomomorphicEcnodedData(EncodedData): 
+    def __init__(self, data: Dict[int, Dict[str, List[int]]]):
+        self.encoded_dict : Dict[int, Dict[str, List[int]]] = data
+        if self.encoded_dict:
+            first_attr = next(iter(self.encoded_dict.values()), {})
+            if first_attr:
+                self.attributes = list(first_attr.keys())
+    
+    def __str__(self): 
+        return f'{self.encoded_dict}'      

@@ -1,6 +1,16 @@
 import numpy as np
+from typing import List
+
 
 # Dice coefficient: 2 * |A ∩ B| / (|A| + |B|)
+
+def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> float: 
+    return float(2 * (intersecntion) / (cadinality_a + cardinality_b))
+
+
+
+
+    
 def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array: 
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
