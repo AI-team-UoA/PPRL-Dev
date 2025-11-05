@@ -5,6 +5,24 @@ from abc import ABC
 import uuid
 from networkx import Graph
 
+def chi_square(in_array: np.array) -> float:
+    """Chi Square Method
+
+    Args:
+        in_array (np.array): Input array
+
+    Returns:
+        float: Statistic computation of Chi Square.
+    """
+    row_sum, column_sum, total = \
+        np.sum(in_array, axis=1), np.sum(in_array, axis=0), np.sum(in_array)
+    sum_sq = expected = 0.0
+    for r in range(0, in_array.shape[0]):
+        for c in range(0, in_array.shape[1]):
+            expected = (row_sum[r]*column_sum[c])/total
+            sum_sq += ((in_array[r][c]-expected)**2)/expected
+    return sum_sq
+
 
 def get_blocks_cardinality(blocks: Dict[str, Block]) -> int:
     """Returns the cardinality of the blocks.

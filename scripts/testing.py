@@ -48,10 +48,9 @@ if __name__ == '__main__':
     blocks = faiss_blocking.build_blocks(new_bloom, new_bloom.attributes, top_k=1) 
 
     print(blocks)
-    exit(10)
 
     wep = WeightedEdgePruning(weighting_scheme='COSINE')
-    new_candidates = wep.process(encoded_data=new_bloom, tqdm_disable=True, store_weights=False)
+    new_candidates = wep.process(encoded_data=new_bloom)
 
     print(new_candidates)
     exit(10)

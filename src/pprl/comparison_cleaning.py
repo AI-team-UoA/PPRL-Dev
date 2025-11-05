@@ -209,7 +209,7 @@ class AbstractMetablocking(AbstractComparisonCleaning, ABC):
         if ws not in weight_dict:
             raise ValueError("This weighting scheme does not exist")
 
-        return weight_dict[ws]
+        return weight_dict[ws]()
 
     def _ejs(self, entity_id, neighbor_id):
         probability = self._counters[neighbor_id] / (len(self._entity_index[entity_id]) + \
