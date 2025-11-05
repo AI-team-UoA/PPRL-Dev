@@ -15,8 +15,8 @@ from src.pprl.evaluation import Evaluation
 
 
 class AbstractBlockProcessing(PPRLFeature):
-    """ 
-    Abstract Class for blocking 
+    """
+    Abstract Class for blocking
     """
     def __init__(self):
         super().__init__()
@@ -27,16 +27,17 @@ class AbstractBlockProcessing(PPRLFeature):
     def report(self) -> None:
         """Prints Block Building method configuration
         """
+        _configuration = self._configuration()
         print(
             "Method name: " + self._method_name +
             "\nMethod info: " + self._method_info +
-            ("\nParameters: \n" + ''.join([f'\t{k}: {v}\n' for k, v in self._configuration().items()])
-             if self._configuration().items() else "\nParameters: Parameter-Free method\n") +
+            ("\nParameters: \n" + ''.join([f'\t{k}: {v}\n' for k, v in _configuration.items()])
+            if self._configuration().items() else "\nParameters: Parameter-Free method\n") +
             "Attributes:\n\t" + ', '.join(c for c in self.attributes) +
             f"\nRuntime: {self.execution_time:2.4f} seconds"
         )
-    
-    def _serial_evaluate(self, entity_index: dict): 
+
+    def _serial_evaluate(self, entity_index: dict):
         true_positives = 0
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
             id2 = id2 + self.encoded_data.bounds[0]
@@ -49,19 +50,16 @@ class AbstractBlockProcessing(PPRLFeature):
     def evaluate(self,
             prediction,
             export_to_df: bool = False,
-            export_to_dict: bool = False,
             with_classification_report: bool = False,
-            verbose: bool = True,
-            with_stats: bool = False) -> any:
+            verbose: bool = True) -> any:
         """Function to evaluate blocking methods f1-score, recall and precision
-        
-        Args: 
+
+        Args:
             prediction (dict) : Blocks predicted from the blocking method
             export_to_df (bool) : Create evaluation dataframe
-            export_to_dict (bool) : Create evaluation dictionary
             with_classification_report (bool) : Printing Info for the blocking method
             with_stats (bool) : Printing Method's Statistics
-        
+
         Returns:
             Evaluation : Evaluation Object with F1, Recall, Precision etc.
         """
@@ -88,16 +86,13 @@ class AbstractBlockProcessing(PPRLFeature):
                                 total_matching_pairs=total_matching_pairs)
         eval_result = eval_obj.report(self.method_configuration(),
                                 export_to_df,
-                                export_to_dict,
                                 with_classification_report,
                                 verbose)
-        if with_stats:
-            self.stats(eval_blocks)
-        return eval_result
-    
-    def stats(self, blocks: dict, verbose: bool = True) -> dict:
-        return None
 
+        return eval_result
+
+    def _configuration(self)-> dict:
+        return {}
 
 class AbstractBlockBuilding(AbstractBlockProcessing):
     """Abstract class for the block building method
@@ -106,27 +101,28 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
     _method_name: str
     _method_info: str
     _method_short_name: str
-    
-    
+
+
     def __init__(self, seed : int = 42):
         super().__init__()
         self.seed : int = seed
         self._create_blocks_function : callable = None
+        self.original_num_of_blocks : int
 
     def _create_blocks(self) -> Dict[str, Block]:
-        blocks : Dict[str, Block] = defaultdict(Block) 
-        dataset = 0 
-        for idx, bloom_filters in self.encoded_data.bitarray_dict.items(): 
-            if idx >= self.encoded_data.bounds[dataset]: 
+        blocks : Dict[str, Block] = defaultdict(Block)
+        dataset = 0
+        for idx, bloom_filters in self.encoded_data.bitarray_dict.items():
+            if idx >= self.encoded_data.bounds[dataset]:
                 dataset += 1
 
             for bit_array in bloom_filters.values():
-                for key in self._block_record(bit_array): 
-                    blocks[str(key)].entities[f'D{dataset}'].add(idx) 
+                for key in self._block_record(bit_array):
+                    blocks[str(key)].entities[f'D{dataset}'].add(idx)
         return blocks
 
-        
-    
+
+
     def build_blocks(
             self,
             encoded_data: BloomEncodedData,
@@ -135,108 +131,82 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         """Main method of Blocking in a dataset
 
             Args:
-                data (Data): Data module that contaiins the processed dataset
+                encoded_data (BloomEncodedData) : Data bloom filters
                 attributes (list, optional): Attributes columns of the datasets
                     that will be processed. Defaults to None. \
                     If not provided, all attributes are selected.
-
-                tqdm_disable (bool, optional): Disables all tqdm at processing. Defaults to False.
-
             Returns:
                 Dict[token, Block]: Dictionary of blocks.
         """
-
         _start_time = time.time()
         self.encoded_data = encoded_data
-       
-       
-        # self.data = data
-        
         bloom_attributes = encoded_data.attributes
 
         if attributes:
-            if set(attributes) > set(bloom_attributes): 
-                raise ValueError(f"Attributes must be a subset of the attributes in Bloom Filters : {bloom_attributes}")
+            if set(attributes) > set(bloom_attributes):
+                raise ValueError(f"Attributes must be a subset "
+                            f"of the attributes in Bloom Filters : {bloom_attributes}")
             self.attributes = attributes
-        else: 
+        else:
             self.attributes = bloom_attributes
 
-        
         self._fit()
 
-        blocks : Dict[str, Block] = self._create_blocks() 
-        # defaultdict(Block)
-        # if self.not_faiss: 
-        #     dataset = 0 
-        #     for idx, bloom_filters in encoded_data.bitarray_dict.items(): 
-        #         if idx >= encoded_data.bounds[dataset]: 
-        #             dataset += 1
-
-        #         for bit_array in bloom_filters.values():
-        #             for key in self._block_record(bit_array): 
-        #                 blocks[str(key)].entities[f'D{dataset}'].add(idx) 
-        # else:                     
-        #     self.
-                                    
+        blocks : Dict[str, Block] = self._create_blocks()
         self.original_num_of_blocks = len(blocks)
         self.blocks = blocks
         self.blocks = self._clean_blocks(blocks)
-        # self.num_of_blocks_dropped = len(blocks) - len(self.blocks)
         self.execution_time = time.time() - _start_time
-        # self._progress_bar.close()
-        
+
         return self.blocks
 
-        # blocks = defaultdict(Block)
-        # for eid, entity in enumerate(self._entities_d1):
-        #     for token in entity:
-        #         blocks[token].entities_D1.add(eid)
-        #     self._progress_bar.update(1)
-        
-        # if not data.is_dirty_er:
-        #     for eid_off, entity in enumerate(self._entities_d2):
-        #         eid = self.data.dataset_limit + eid_off
-        #         for token in entity:
-        #             blocks[token].entities_D2.add(eid)
-        #         self._progress_bar.update(1)
-
-    def _clean_blocks(self, blocks): 
+    def _clean_blocks(self, blocks):
         return _drop_single_entity_blocks(blocks)
-
 
     def report(self) -> None:
         """Prints Block Building method configuration
         """
+        _configuration = self._configuration()
         print(
             "Method name: " + self._method_name +
             "\nMethod info: " + self._method_info +
-            ("\nParameters: \n" + ''.join(['\t{0}: {1}\n'.format(k, v) for k, v in self._configuration().items()]) if self._configuration().items() else "\nParameters: Parameter-Free method\n") +
-            "Attributes:\n\t" + ', '.join(c for c in self.attributes ) + 
-            "\nRuntime: {:2.4f} seconds".format(self.execution_time)
+            ("\nParameters: \n" + ''.join([f'\t{k}: {v}\n' for k, v in _configuration.items()])
+            if _configuration.items() else "\nParameters: Parameter-Free method\n") +
+            "Attributes:\n\t" + ', '.join(c for c in self.attributes ) +
+            f"\nRuntime: {self.execution_time:2.4f} seconds"
         )
 
     @abstractmethod
-    def _fit(self, bitarray_dict: dict) -> None: 
+    def _fit(self) -> None:
         pass
 
-    def _block_record(self, bloom: bitarray) -> List[str]: 
+    def _block_record(self, bf: bitarray) -> List[str]:
         pass
 
-    # @abstractmethod
-    # def _clean_blocks(self, blocks: dict) -> dict:
-    #     pass
-
-    # @abstractmethod
-    # def _configuration(self) -> dict:
-    #     pass    
+    def _configuration(self) -> dict:
+        return {}
 
 
 
 class LSHBlocker(AbstractBlockBuilding):
     """
-    LSH-based blocking for Bloom-filter-encoded records.
-    Each record produces Λ blocking keys of length Ψ bits.
+    Implements Locality-Sensitive Hashing (LSH)-based blocking for
+    Bloom-filter–encoded records.
+
+    Each encoded record produces Λ (lambda) blocking keys, each of
+    length Ψ (psi) bits. These keys are used to group similar records
+    together before performing expensive pairwise comparisons.
+
+    Attributes:
+        psi (int): Number of bit positions per key (Ψ).
+        lmbda (int): Number of blocking keys per record (Λ).
+        prune_ratio (float): Ratio defining how frequently occurring
+            or rare bit positions are pruned from the candidate pool.
+        prune_sample (int): Number of records sampled to estimate bit
+            frequency distribution.
+        seed (int): Random seed for reproducibility.
     """
+
     def __init__(
         self,
         psi: int = 36,
@@ -244,21 +214,32 @@ class LSHBlocker(AbstractBlockBuilding):
         prune_ratio: float = 0.6,
         prune_sample: int = 1000,
         seed: int = 42
-    ):
+    ):                                          # pylint: disable=too-many-positional-arguments disable=too-many-arguments
         """
-        :param psi: number of bit positions per key (Ψ).
-        :param lmbda: number of keys per record (Λ).
-        :param prune_ratio: ratio of most frequent/uncommon bit positions to prune.
-        :param prune_sample: number of records to sample for frequency estimation.
+        Initialize LSHBlocker
+
+        Args:
+            psi (int): number of bit positions per key (Ψ)
+            lmbda (int): number of keys per record (Λ)
+            prune_ratio (float): ratio of most frequent/uncommon bit positions to prune
+            prune_sample (int): number of records to sample for frequency estimation
         """
         super().__init__(seed=seed)
-        self.rng : random.Random
+        self._rng : random.Random
         self.psi = psi
         self.lmbda = lmbda
         self.prune_ratio = prune_ratio
         self.prune_sample = prune_sample
-        self.bit_positions = None  # will hold usable bit indices
-        self._create_blocks_function = self._create_blocks
+        self._bit_positions = None  # will hold usable bit indices
+        self._encoded_data : BloomEncodedData
+
+    def _configuration(self):
+        return {"psi" : self.psi,
+            "lmbda": self.lmbda,
+            "prune_ratio": self.prune_ratio,
+            "prune_sample": self.prune_sample,
+            "seed": self.seed}
+
 
     def _select_bit_positions(self, bflist: List[bitarray]) -> List[int]:
         """
@@ -270,60 +251,85 @@ class LSHBlocker(AbstractBlockBuilding):
         sample = bflist if len(bflist) <= self.prune_sample else bflist[: self.prune_sample]
         for bf in sample:
             freq += np.array(bf.tolist(), dtype=int)
-        
+
         # normalize to frequency ratio
         freq_ratio = freq / len(sample)
-        
+
         mask = (freq_ratio > self.prune_ratio) | (freq_ratio < (1 - self.prune_ratio))
         # candidate positions are those not masked
         # print(mask)
         candidates = [i for i, bad in enumerate(mask) if not bad]
-        
+
         if len(candidates) < self.psi:
             raise ValueError("Not enough bit positions after pruning")
         return candidates
 
     def _fit(self):
-
+        """Initialize blocker by sampling to prune and selecting usable bit positions."""
         bitarray_dict : Dict[int, Dict[str, bitarray]] = self.encoded_data.bitarray_dict
         bitarray_list: List[bitarray] = [
             reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
             # for bitarray in bitarrays.values()
         ]
-        """Initialize blocker by sampling to prune and selecting usable bit positions."""
-        self.rng = random.Random(self.seed)
-        self.bit_positions = self._select_bit_positions(bitarray_list)
+        self._rng = random.Random(self.seed)
+        self._bit_positions = self._select_bit_positions(bitarray_list)
 
     def _block_record(self, bf: bitarray) -> List[str]:
         """
         Generate Λ blocking keys for a single Bloom filter record.
         Each key is Ψ bits sampled from bf at selected positions.
         """
-        if self.bit_positions is None:
+        if self._bit_positions is None:
             raise RuntimeError("Call fit() before blocking")
         keys = []
-        for i in range(self.lmbda):
-            positions = self.rng.sample(self.bit_positions, self.psi)
+        for _ in range(self.lmbda):
+            positions = self._rng.sample(self._bit_positions, self.psi)
             bits = ''.join('1' if bf[j] else '0' for j in positions)
             # optionally, can hash this bit string to reduce size
             keys.append(bits)
         return keys
 
-    
-class BitBlocker(AbstractBlockBuilding):
 
-    def __init__(self, 
+class BitBlocker(AbstractBlockBuilding):
+    """
+    LSH-based blocking for Bloom-filter-encoded records.
+
+    Each record produces λ blocking keys of length ψ bits
+    based on their Hamming values.
+
+    Parameters
+    ----------
+    psi : int, default=36
+        Number of bits per blocking key.
+    lmbda : int, default=3
+        Number of blocking keys per record.
+    seed : int, default=42
+        Random seed for reproducibility.
+    """
+    def __init__(self,
             psi: int = 36,
             lmbda: int = 3,
             seed : int = 42):
+        """
+        Initializer of BitBlocker
+
+        Args:
+            psi (int): Number of bits per blocking key
+            lmbda (int): Number of blocking keys per record
+            seed (int): Random seed for reproducibility
+
+        """
         super().__init__(seed=seed)
         if psi < 1 or lmbda < 1 :
-            raise ValueError(f"Both Values psi and lmbda must be positive numbers : {psi} , {lmbda}")
+            raise ValueError(f"Both Values psi and lmbda must be positive numbers : {psi}, {lmbda}")
 
         self.psi = psi
         self.lmbda = lmbda
+        self.hash_len : int
         self._create_blocks_function = self._create_blocks
-        
+        self.encoded_data : BloomEncodedData
+        self.rng : random.Random
+        self.hash_indices : tuple
 
     def _fit(self) -> None:
 
@@ -334,7 +340,7 @@ class BitBlocker(AbstractBlockBuilding):
 
 
     def _block_record(self, bf: bitarray) -> List[int]:
-        block_keys = list()
+        block_keys = []
         for i, table_indices in enumerate(self.hash_indices):
             vals = map(bf.__getitem__, table_indices)
             table_block = sum(b << j for j, b in enumerate(vals))
@@ -342,76 +348,83 @@ class BitBlocker(AbstractBlockBuilding):
 
         return block_keys
 
-class FAISSBlocking(AbstractBlockBuilding): 
+class FAISSBlocking(AbstractBlockBuilding):
+    """
+    A blocking implementation using FAISS for efficient similarity-based blocking.
+
+    This class builds blocks by performing approximate nearest neighbor search
+    on Bloom filter encodings of entities using FAISS.
+    It creates blocks where each block contains entities that are similar to
+    each other based on their binary vector representations.
+
+    Attributes:
+        vector_size (int): Dimensionality of the input vectors.
+        top_k (int): Number of nearest neighbors to retrieve for each entity.
+        index (faiss.IndexBinaryFlat): FAISS binary index for efficient similarity search.
+        neighbors (np.array): Array containing neighbor indices from FAISS search.
+        distances (np.array): Array containing distances to neighbors from FAISS search.
+    """
+
     def __init__(self):
         super().__init__()
-        self.vectors_1: np.array
-        self.vectors_2: np.array = None
         self.vector_size: int
-        self.num_of_clusters: int
         self.top_k: int
-        self._faiss_metric_type = None
-        self._create_blocks_function = self._create_blocks
+        self.encoded_data : BloomEncodedData
+        self.neighbors : np.array
+        self.distances : np.array
+        self.index : faiss.IndexBinaryFlat
+
 
 
     def _create_blocks(self):
-        blocks : Dict[int, set] = defaultdict(set) 
-        dataset = len(self.encoded_data.bounds) 
-
-        for i in range(1, dataset): 
+        blocks : Dict[int, set] = defaultdict(set)
+        dataset = len(self.encoded_data.bounds)
+        bitarray_dict : dict = self.encoded_data.bitarray_dict
+        for i in range(1, dataset):
             lower_bound = self.encoded_data.bounds[i-1]
             upper_bound = self.encoded_data.bounds[i]
-            bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in self.encoded_data.bitarray_dict.items() if lower_bound <= k < upper_bound} 
+            bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in bitarray_dict.items()
+                        if lower_bound <= k < upper_bound}
             bitarray_list: List[bitarray] = [
                 reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
             ]
 
-            X = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8) for b in bitarray_list], dtype=np.uint8)
+            vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
+                        for b in bitarray_list], dtype=np.uint8)
 
-            self.neighbors : np.array
-            self.distances, self.neighbors = self.index.search(X, self.top_k)
+            self.distances, self.neighbors = self.index.search(vector, self.top_k)
             for _entity in range(0, self.neighbors.shape[0]):
                 _entity_id = _entity + lower_bound
-                for _neighbor_id in self.neighbors[_entity]: 
-                    if _neighbor_id < 0: 
+                for _neighbor_id in self.neighbors[_entity]:
+                    if _neighbor_id < 0:
                         break
                     blocks[int(_neighbor_id)].add(_entity_id)
 
-            # for bit_array in bloom_filters.values():
-            #     for key in self._block_record(bit_array): 
-            #         blocks[str(key)].entities[f'D{dataset}'].add(idx) 
         return blocks
-
-        # return 
-    
 
     def build_blocks(self,
                     encoded_data: BloomEncodedData,
                     attributes : List[str] = None,
                     vector_size: int = 300,
-                    num_of_clusters: int = 5,
-                    top_k: int = 30, 
-    ) -> Dict[Union[str, int], Block]: 
+                    top_k: int = 30,
+    ) -> Dict[Union[str, int], Block]:
         self.vector_size = vector_size
-        self.num_of_clusters = num_of_clusters
         self.top_k = top_k
         return super().build_blocks(encoded_data, attributes)
-    
+
     def _fit(self):
-        bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in self.encoded_data.bitarray_dict.items() if 0 <= k < self.encoded_data.bounds[0]} 
+        enc_bitarray_dict : dict = self.encoded_data.bitarray_dict
+        bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in enc_bitarray_dict.items()
+                        if 0 <= k < self.encoded_data.bounds[0]}
         bitarray_list: List[bitarray] = [
             reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
         ]
-        
-        X = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8) for b in bitarray_list], dtype=np.uint8)
+
+        vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
+            for b in bitarray_list], dtype=np.uint8)
 
         self.index : faiss.IndexBinaryFlat = faiss.IndexBinaryFlat(self.encoded_data.length)
-        self.index.add(X)
-    
-    def _clean_blocks(self, blocks):
-        return blocks 
-    
-    
-    
+        self.index.add(vector)
 
-## JACCARD BLOCKER (?)
+    def _clean_blocks(self, blocks):
+        return blocks
