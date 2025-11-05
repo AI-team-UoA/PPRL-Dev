@@ -1,4 +1,4 @@
-from .datamodel import PPRLFeature, Data, HomomorphicEcnodedData, BloomEncodedData
+from .datamodel import PPRLFeature, HomomorphicEcnodedData, BloomEncodedData
 from bitarray import bitarray
 from typing import List, Literal, Union, Dict, Generator, Set, Optional
 # from pybloom_live import BloomFilter as Bloom
@@ -87,6 +87,10 @@ class BloomFilter:
         # HASH STRING or HASH QGRAM
         
         # HASH STRING here
+
+        if isinstance(bf, list): 
+            bf = set(bf)
+
         if hash_token: 
             hashed = hashlib.sha256(salted_token).digest()
             for i in range(self.num_hashes):
@@ -108,7 +112,7 @@ class BloomFilter:
                     bf.add(position)
                 # position = (int.from_bytes(hashed, 'little') % self.size) + self.offset
                 # bf.add(position)
-        return bf
+        return [*bf]
     
     
     def _salted_string(self, str_to_enc: str) -> List[int]: 
@@ -202,85 +206,84 @@ class BloomFilter:
         else: 
             self.attributes = columns
         print(f'Encrypting these attributes: {self.attributes}')
-        
+
         df = df[self.attributes] if self.attributes else df
-        
         return self._encode(df)
 
     
     
-class HomomorphicEncryption: 
-    def __init__(self,
-        qgrams : int = 2,
-        pad : bool = True,
-        salt : str = "",
-        attributes : List[str] = None,
-    ):
-        self.qgrams : int = qgrams
-        self.pad : bool = pad
-        self.salt : str = salt
-        self.attributes : List[str] = attributes
+# class HomomorphicEncryption: 
+#     def __init__(self,
+#         qgrams : int = 2,
+#         pad : bool = True,
+#         salt : str = "",
+#         attributes : List[str] = None,
+#     ):
+#         self.qgrams : int = qgrams
+#         self.pad : bool = pad
+#         self.salt : str = salt
+#         self.attributes : List[str] = attributes
     
-    def _hash(self, str_to_enc: str) -> List[int]: 
-        tokens = list(set(filter(None, re.split('[\\W_]', str_to_enc.lower()))))
-        qgrams_set = set()
-        for token in tokens: 
-            salted_token = self.salt + token
-            # if len(salted_token) < self.qgrams and self.pad:
-            #     salted_token = salted_token + '#'*(self.qgrams - len(salted_token))
+#     def _hash(self, str_to_enc: str) -> List[int]: 
+#         tokens = list(set(filter(None, re.split('[\\W_]', str_to_enc.lower()))))
+#         qgrams_set = set()
+#         for token in tokens: 
+#             salted_token = self.salt + token
+#             # if len(salted_token) < self.qgrams and self.pad:
+#             #     salted_token = salted_token + '#'*(self.qgrams - len(salted_token))
               
-            for i in range(len(salted_token) - self.qgrams + 1):
-                qgram_token = str(salted_token[i: i+self.qgrams]) 
-                if len(qgram_token) < self.qgrams and self.pad:
-                    qgram_token = qgram_token + '#'*(self.qgrams - len(qgram_token))
-                qgrams_set.add(qgram_token)
-        vector_uint64 : List[int] = []
-        for token in list(qgrams_set): 
-            uint64 : int = 0
-            for idx, c in enumerate(reversed(token)):
-                uint64 += (ord(c) & 0xff) << (8 * idx)
-            vector_uint64.append(uint64)
+#             for i in range(len(salted_token) - self.qgrams + 1):
+#                 qgram_token = str(salted_token[i: i+self.qgrams]) 
+#                 if len(qgram_token) < self.qgrams and self.pad:
+#                     qgram_token = qgram_token + '#'*(self.qgrams - len(qgram_token))
+#                 qgrams_set.add(qgram_token)
+#         vector_uint64 : List[int] = []
+#         for token in list(qgrams_set): 
+#             uint64 : int = 0
+#             for idx, c in enumerate(reversed(token)):
+#                 uint64 += (ord(c) & 0xff) << (8 * idx)
+#             vector_uint64.append(uint64)
             
-        return vector_uint64 
+#         return vector_uint64 
 
-    def _create_vector_for_row(self, row : pd.Series) -> Dict[str, List[int]]:
-        homomorphic_vector = dict()
-        if self.attributes: 
-            for attribute in self.attributes:
-                vector = self._hash(str(row[attribute]))
-                if len(vector) > 0: 
-                    homomorphic_vector[attribute] = vector
+#     def _create_vector_for_row(self, row : pd.Series) -> Dict[str, List[int]]:
+#         homomorphic_vector = dict()
+#         if self.attributes: 
+#             for attribute in self.attributes:
+#                 vector = self._hash(str(row[attribute]))
+#                 if len(vector) > 0: 
+#                     homomorphic_vector[attribute] = vector
 
-        else: 
-            flatten_row : list = row.values.tolist()
-            flatten_row = " ".join(str(x) for x in flatten_row) 
-            homomorphic_vector['row'] = self._hash(flatten_row)        
-        return homomorphic_vector
+#         else: 
+#             flatten_row : list = row.values.tolist()
+#             flatten_row = " ".join(str(x) for x in flatten_row) 
+#             homomorphic_vector['row'] = self._hash(flatten_row)        
+#         return homomorphic_vector
     
-    def _encode(self) -> HomomorphicEcnodedData:
-        df_1 : pd.DataFrame = self.data.dataset_1[self.attributes] if self.attributes else self.data.dataset_1
-        df_2 : pd.DataFrame = self.data.dataset_2[self.attributes] if self.attributes else self.data.dataset_2
-        homomorphic_vector = dict()
-        for id, (_, row) in enumerate(df_1.iterrows()): 
-            homomorphic_vector[id] = self._create_vector_for_row(row)
-        for id, (_, row) in enumerate(df_2.iterrows(), start = self.data.dataset_limit): 
-            homomorphic_vector[id] = self._create_vector_for_row(row)
+#     def _encode(self) -> HomomorphicEcnodedData:
+#         df_1 : pd.DataFrame = self.data.dataset_1[self.attributes] if self.attributes else self.data.dataset_1
+#         df_2 : pd.DataFrame = self.data.dataset_2[self.attributes] if self.attributes else self.data.dataset_2
+#         homomorphic_vector = dict()
+#         for id, (_, row) in enumerate(df_1.iterrows()): 
+#             homomorphic_vector[id] = self._create_vector_for_row(row)
+#         for id, (_, row) in enumerate(df_2.iterrows(), start = self.data.dataset_limit): 
+#             homomorphic_vector[id] = self._create_vector_for_row(row)
         
-        return HomomorphicEcnodedData(data=homomorphic_vector)
+#         return HomomorphicEcnodedData(data=homomorphic_vector)
 
-    def encode(self, data: Data) -> HomomorphicEcnodedData : 
-        self.data = data
-        columns_1 = list(data.dataset_1.columns)
-        columns_2 = list(data.dataset_2.columns) 
+#     def encode(self, data: Data) -> HomomorphicEcnodedData : 
+#         self.data = data
+#         columns_1 = list(data.dataset_1.columns)
+#         columns_2 = list(data.dataset_2.columns) 
 
-        if self.attributes:
-            for col in self.attributes: 
-                if col not in columns_1 or col not in columns_2: 
-                    raise ValueError("Attributes must be the same between the two dataframes")
-        else: 
-            upperset : set = set(columns_1) if len(set(columns_1)) > len(set(columns_2)) else set(columns_2)
-            subset : set = set(columns_1) if len(set(columns_1)) <= len(set(columns_2)) else set(columns_2)
-            self.attributes = list(subset) if subset.issubset(upperset) else None
-        print(f'Encrypting these attributes: {self.attributes}')
+#         if self.attributes:
+#             for col in self.attributes: 
+#                 if col not in columns_1 or col not in columns_2: 
+#                     raise ValueError("Attributes must be the same between the two dataframes")
+#         else: 
+#             upperset : set = set(columns_1) if len(set(columns_1)) > len(set(columns_2)) else set(columns_2)
+#             subset : set = set(columns_1) if len(set(columns_1)) <= len(set(columns_2)) else set(columns_2)
+#             self.attributes = list(subset) if subset.issubset(upperset) else None
+#         print(f'Encrypting these attributes: {self.attributes}')
         
-        return self._encode() 
+#         return self._encode() 

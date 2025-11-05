@@ -2,14 +2,16 @@ import random
 import numpy as np
 from bitarray import bitarray
 from collections import defaultdict
-from typing import List, Dict, Union
+from typing import List, Dict, Union, Literal
 from pybloom_live import BloomFilter as Bloom  
-from src.pprl.datamodel import Data, Block, PPRLFeature, BloomEncodedData
+from src.pprl.datamodel import  Block, PPRLFeature, BloomEncodedData
 import time
 from abc import abstractmethod
 from functools import reduce
 import operator
 from src.pprl.utils import _drop_single_entity_blocks
+import faiss
+
 
 class AbstractBlockProcessing(PPRLFeature):
     """ 
@@ -107,8 +109,22 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
     def __init__(self, seed : int = 42):
         super().__init__()
         self.seed : int = seed
+        self._create_blocks_function : callable = None
+
+    def _create_blocks(self) -> Dict[str, Block]:
+        blocks : Dict[str, Block] = defaultdict(Block) 
+        dataset = 0 
+        for idx, bloom_filters in self.encoded_data.bitarray_dict.items(): 
+            if idx >= self.encoded_data.bounds[dataset]: 
+                dataset += 1
+
+            for bit_array in bloom_filters.values():
+                for key in self._block_record(bit_array): 
+                    blocks[str(key)].entities[f'D{dataset}'].add(idx) 
+        return blocks
 
         
+    
     def build_blocks(
             self,
             encoded_data: BloomEncodedData,
@@ -143,29 +159,22 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         else: 
             self.attributes = bloom_attributes
 
-
-        # self._progress_bar = tqdm(
-        #     total=data.num_of_entities, desc=self._method_name, disable=tqdm_disable
-        # )
         
         self._fit()
-        # self._fit(encoded_data.bitarray_dict)
 
-        blocks : Dict[str, Block] = defaultdict(Block)
-        for dataset, (start, end) in encoded_data.dataset_indexes.items():
-            for idx in range(start, end):
-                for _, bit_array in encoded_data.bitarray_dict[idx].items(): 
-                    for key in self._block_record(bit_array):
-                        blocks[str(key)].entities[f'D{dataset}'].add(idx)
+        blocks : Dict[str, Block] = self._create_blocks() 
+        # defaultdict(Block)
+        # if self.not_faiss: 
+        #     dataset = 0 
+        #     for idx, bloom_filters in encoded_data.bitarray_dict.items(): 
+        #         if idx >= encoded_data.bounds[dataset]: 
+        #             dataset += 1
 
-        # for idx, bitarray_dict in encoded_data.bitarray_dict.items():
-        #     for _, bit_array in bitarray_dict.items():
-        #         for key in self._block_record(bit_array):
-        #             if idx < encoded_data.dataset_limit: 
-        #                 blocks[str(key)].entities_D1.add(idx)
-        #             else: 
-        #                 blocks[str(key)].entities_D2.add(idx)
-
+        #         for bit_array in bloom_filters.values():
+        #             for key in self._block_record(bit_array): 
+        #                 blocks[str(key)].entities[f'D{dataset}'].add(idx) 
+        # else:                     
+        #     self.
                                     
         self.original_num_of_blocks = len(blocks)
         self.blocks = blocks
@@ -208,7 +217,6 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
     def _fit(self, bitarray_dict: dict) -> None: 
         pass
 
-    @abstractmethod
     def _block_record(self, bloom: bitarray) -> List[str]: 
         pass
 
@@ -248,6 +256,7 @@ class LSHBlocker(AbstractBlockBuilding):
         self.prune_ratio = prune_ratio
         self.prune_sample = prune_sample
         self.bit_positions = None  # will hold usable bit indices
+        self._create_blocks_function = self._create_blocks
 
     def _select_bit_positions(self, bflist: List[bitarray]) -> List[int]:
         """
@@ -311,6 +320,8 @@ class BitBlocker(AbstractBlockBuilding):
 
         self.psi = psi
         self.lmbda = lmbda
+        self._create_blocks_function = self._create_blocks
+        
 
     def _fit(self) -> None:
 
@@ -329,5 +340,76 @@ class BitBlocker(AbstractBlockBuilding):
 
         return block_keys
 
+class FAISSBlocking(AbstractBlockBuilding): 
+    def __init__(self):
+        super().__init__()
+        self.vectors_1: np.array
+        self.vectors_2: np.array = None
+        self.vector_size: int
+        self.num_of_clusters: int
+        self.top_k: int
+        self._faiss_metric_type = None
+        self._create_blocks_function = self._create_blocks
+
+
+    def _create_blocks(self):
+        blocks : Dict[int, set] = defaultdict(set) 
+        dataset = len(self.encoded_data.bounds) 
+
+        for i in range(1, dataset): 
+            lower_bound = self.encoded_data.bounds[i-1]
+            upper_bound = self.encoded_data.bounds[i]
+            bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in self.encoded_data.bitarray_dict.items() if lower_bound <= k < upper_bound} 
+            bitarray_list: List[bitarray] = [
+                reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
+            ]
+
+            X = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8) for b in bitarray_list], dtype=np.uint8)
+
+            self.neighbors : np.array
+            self.distances, self.neighbors = self.index.search(X, self.top_k)
+            for _entity in range(0, self.neighbors.shape[0]):
+                _entity_id = _entity + lower_bound
+                for _neighbor_id in self.neighbors[_entity]: 
+                    if _neighbor_id < 0: 
+                        break
+                    blocks[int(_neighbor_id)].add(_entity_id)
+
+            # for bit_array in bloom_filters.values():
+            #     for key in self._block_record(bit_array): 
+            #         blocks[str(key)].entities[f'D{dataset}'].add(idx) 
+        return blocks
+
+        # return 
+    
+
+    def build_blocks(self,
+                    encoded_data: BloomEncodedData,
+                    attributes : List[str] = None,
+                    vector_size: int = 300,
+                    num_of_clusters: int = 5,
+                    top_k: int = 30, 
+    ) -> Dict[Union[str, int], Block]: 
+        self.vector_size = vector_size
+        self.num_of_clusters = num_of_clusters
+        self.top_k = top_k
+        return super().build_blocks(encoded_data, attributes)
+    
+    def _fit(self):
+        bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in self.encoded_data.bitarray_dict.items() if 0 <= k < self.encoded_data.bounds[0]} 
+        bitarray_list: List[bitarray] = [
+            reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
+        ]
+        
+        X = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8) for b in bitarray_list], dtype=np.uint8)
+
+        self.index : faiss.IndexBinaryFlat = faiss.IndexBinaryFlat(self.encoded_data.length)
+        self.index.add(X)
+    
+    def _clean_blocks(self, blocks):
+        return blocks 
+    
+    
+    
 
 ## JACCARD BLOCKER (?)

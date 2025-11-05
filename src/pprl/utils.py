@@ -1,6 +1,19 @@
 import numpy as np
 from typing import List
 from src.pprl.datamodel import Block
+from abc import ABC
+from typing import Tuple
+import uuid
+from networkx import Graph
+
+def batch_pairs(iterable, batch_size: int = 1):
+    """
+    Generator function that breaks an iterable into batches of a set size.
+    :param iterable: The iterable to be batched.
+    :param batch_size: The size of each batch.
+    """
+    return (iterable[pos:pos + batch_size] for pos in range(0, len(iterable), batch_size))
+
 
 # Dice coefficient: 2 * |A ∩ B| / (|A| + |B|)
 def _drop_single_entity_blocks(blocks : dict[Block]) -> dict: 
@@ -53,3 +66,95 @@ def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
 
 
     return avg_similarities
+
+
+
+class PredictionData(ABC):
+    """Auxiliarry module used to store basic information about the to-emit, predicted pairs
+       It is used to retrieve that data efficiently during the evaluation phase, and subsequent storage of emission data (e.x. total emissions)
+
+    Args:
+        ABC (ABC): ABC Module
+    """
+    def __init__(self, matcher, matcher_info : dict) -> None:
+        self.set_matcher_info(matcher_info)
+        self.set_duplicate_emitted(matcher.duplicate_emitted)
+        self.set_candidate_pairs(self._format_predictions(matcher.pairs))
+    
+    def _format_predictions(self, predictions) -> List[Tuple[int, int]]:
+        """Transforms given predictions into a list of duplets (candidate pairs)
+           Currently Graph and Default input is supported
+
+        Args:
+            predictions (Graph / List[Tuple[int, int]]): Progressive Matcher predictions
+
+        Returns:
+            List[Tuple[int, int]]: Formatted Predictions
+        """
+        return [edge[:3] for edge in predictions.edges] if isinstance(predictions, Graph) else predictions
+        
+    def get_name(self) -> str:
+        _matcher_info : dict = self.get_matcher_info()
+        if('name' not in _matcher_info): raise ValueError("Matcher doesn't have a name - Make sure its execution data has been calculated")
+        return _matcher_info['name']
+    
+    def get_candidate_pairs(self) -> List[Tuple[float, int, int]]:
+        if(self._candidate_pairs is None): raise ValueError("Pairs not scheduled yet - Cannot retrieve candidate pairs")
+        return self._candidate_pairs
+    
+    def get_duplicate_emitted(self) -> dict:
+        if(self._duplicate_emitted is None): raise ValueError("No information about the status of true positives' emission")
+        return self._duplicate_emitted
+    
+    def get_total_emissions(self) -> int:
+        _matcher_info : dict = self.get_matcher_info()
+        if('total_emissions' not in _matcher_info): raise ValueError("Pairs not emitted yet - Total Emissions are undefined")
+        return _matcher_info['total_emissions']
+    
+    def get_normalized_auc(self) -> float:
+        _matcher_info : dict = self.get_matcher_info()
+        if('auc' not in _matcher_info): raise ValueError("Pairs not emitted yet - Normalized AUC is undefined")
+        return _matcher_info['auc']
+    
+    def get_cumulative_recall(self) -> float:
+        _matcher_info : dict = self.get_matcher_info()
+        if('recall' not in _matcher_info): raise ValueError("Pairs not emitted yet - Cumulative Recall is undefined")
+        return _matcher_info['recall']
+    
+    def get_matcher_info(self) -> dict:
+        if(self._matcher_info is None): raise ValueError("Pairs not emitted yet - Matcher Info is undefined")
+        return self._matcher_info
+    
+    def set_matcher_info(self, matcher_info : dict) -> None:
+        self._matcher_info : dict = matcher_info
+    
+    def set_name(self, name : str):
+        _matcher_info : dict = self.get_matcher_info()
+        _matcher_info['name'] = name  
+    
+    def set_candidate_pairs(self, candidate_pairs : List[Tuple[float, int, int]]) -> None:
+        self._candidate_pairs : List[Tuple[float, int, int]] = candidate_pairs
+    
+    def set_duplicate_emitted(self, duplicate_emitted : dict) -> None:
+        self._duplicate_emitted : dict = duplicate_emitted
+    
+    def set_total_emissions(self, total_emissions : int) -> None:
+        _matcher_info : dict = self.get_matcher_info()
+        _matcher_info['total_emissions'] = total_emissions
+        
+    def set_normalized_auc(self, normalized_auc : float) -> None:
+        _matcher_info : dict = self.get_matcher_info()
+        _matcher_info['auc'] = normalized_auc
+        
+    def set_cumulative_recall(self, cumulative_recall : float) -> None:
+        _matcher_info : dict = self.get_matcher_info()
+        _matcher_info['recall'] = cumulative_recall        
+        
+
+def generate_unique_identifier() -> str:
+    """Returns unique identifier which is used to cross reference workflows stored in json file and their performance graphs
+
+    Returns:
+        str: Unique identifier
+    """
+    return str(uuid.uuid4())  

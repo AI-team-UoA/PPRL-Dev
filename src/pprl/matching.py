@@ -1,15 +1,22 @@
 from typing import Literal, List, Callable, Dict, overload, Tuple, Union
 from src.pprl.utils import _dice, _scm
 import src.pprl.openfhe_similarity
-from src.pprl.datamodel import Data, Block, EncodedData, BloomEncodedData, HomomorphicEcnodedData
+from src.pprl.datamodel import  Block, EncodedData, BloomEncodedData, HomomorphicEcnodedData
 from pybloom_live import BloomFilter as Bloom
 from networkx import Graph
 from ordered_set import OrderedSet
 import numpy as np
 from openfhe import *
-
-class Matcher: 
+from itertools import combinations, product
+from .evaluation import Evaluation
+from .datamodel import PPRLFeature
+import time
+class Matcher(PPRLFeature): 
     
+    
+    _method_name = 'Matcher'
+    _method_short_name = 'Matcher'
+
     def __init__(self,
         batch_size : int = 10_000,
         threshold : float = 0.6,
@@ -22,6 +29,8 @@ class Matcher:
         self.threshold : float = threshold
         self.metric : str = metric
         self.attributes : List[str] = attributes
+        self.execution_time : float = 0.0
+    
         
         
     def _candidates(self, extract_candidates: Union[Dict[str, Block], EncodedData]) -> Tuple[set, OrderedSet]: 
@@ -30,20 +39,24 @@ class Matcher:
 
         if isinstance(extract_candidates, dict):
             for _, block in extract_candidates.items():
-                for eid1 in block.entities_D1: 
-                    for eid2 in block.entities_D2: 
+                for d1, d2 in combinations(block.entities.values(), 2):
+                    for eid1, eid2 in product(d1, d2):
                         candidates.add((eid1,eid2))
                         unique_ids.add(eid1)
                         unique_ids.add(eid2)
         else: 
-            data_limit = self.data.dataset_limit
-            end_of_dict = len(extract_candidates.encoded_dict) 
-            for i in range(data_limit):
-                for j in range(data_limit, end_of_dict):
-                    candidates.add((i, j))
-                    unique_ids.add(i)
-                    unique_ids.add(j)
-            
+            start = 0
+            for i in range(0, len(extract_candidates.bounds)): 
+                bound = extract_candidates.bounds[i]
+                d1 = range(start, bound)
+                for j in range(i+1, len(extract_candidates.bounds)): 
+                    d2 = range(extract_candidates.bounds[j-1], extract_candidates.bounds[j])
+                    for eid1, eid2 in product(d1, d2): 
+                        candidates.add((eid1,eid2))
+                        unique_ids.add(eid1)
+                        unique_ids.add(eid2)
+                start = bound
+        
         return candidates, unique_ids
     
     @overload
@@ -55,13 +68,12 @@ class Matcher:
         """
         Similarity Computaation for Homomorphic Encrypted Data
         
-        args:
-        
-            data : Data
-            ecnoded_data: HomomorphicEncodedData
-            blocks [optional] : Dictionary of Blocks 
-            type_of_match [optional] : {'overlap', ...}
-            homomorphism [optional] : {'bgvs', ...}
+        :param data: Data
+        :param ecnoded_data: HomomorphicEncodedData
+        :param blocks: Dictionary of Blocks 
+        :type blocks: dict, optional
+        :param type_of_match[optional]: {'overlap', ...}
+        :param homomorphism[optional]: {'bgvs', ...}
         """
         ...
        
@@ -72,12 +84,10 @@ class Matcher:
         """
         Vectorized  similarity computation for Bloom filters.
 
-        args:
-        
-            data : Data
-            ecnoded_data: HomomorphicEncodedData
-            blocks [optional] : Dictionary of Blocks 
-
+        :param BloomEncodedData ecnoded_data: Bloom Filters
+        :param dict, optional blocks: Dictionary of Blocks 
+        :return graph: Graph of similar pairs 
+        :rtype: networkx.Graph
         """
         
         ... 
@@ -88,18 +98,29 @@ class Matcher:
                 blocks: Dict[str, Block] = None, 
                 **kwargs) -> Graph: 
 
+        start_time = time.time()
+        self.encoded_data = encoded_data
+        self.skip_ground_truth = encoded_data.skip_ground_truth
+        
+        if not encoded_data.skip_ground_truth: 
+            self.ground_truth = encoded_data.ground_truth
+        
         self.candidates, self.unique_ids = self._candidates(blocks) if blocks else self._candidates(encoded_data)
 
         if not self.candidates:
-            return Graph()
+            gragh = Graph()
 
         if isinstance(encoded_data, BloomEncodedData): 
-            return self._predict_from_bloom(encoded_data)
+            self._method_info = """Matching with Bloom Filters"""
+            graph =  self._predict_from_bloom(encoded_data)
         elif isinstance(encoded_data, HomomorphicEcnodedData):
-            return self._predict_from_vector(encoded_data, **kwargs) 
+            self._method_info = """Matching with Homomorhpic Encoded Data """
+            graph = self._predict_from_vector(encoded_data, **kwargs) 
         else: 
             raise TypeError(f"encoded_data must be of type: BloomEncodedData or HomomorphicEcnodedData, but its {type(encoded_data)}")
 
+        self.execution_time = time.time() - start_time
+        return graph
 
     def _bgvs(self) -> None:
         parameters = CCParamsBGVRNS()
@@ -124,6 +145,11 @@ class Matcher:
         self.cc.EvalSumKeyGen(self.key_pair.secretKey)      # cc->EvalSumKeyGen(keyPair.secretKey);
        
             
+    def _configuration(self):
+        return { "batch_size": self.batch_size,
+            "threshold": self.threshold,
+            "metric": self.metric,
+            "attributes": self.attributes } 
         
 
     def _predict_from_vector(self, encoded_data: HomomorphicEcnodedData,
@@ -166,9 +192,9 @@ class Matcher:
         self._metric = metrics_dict['dice'] if self.metric not in metrics_dict else metrics_dict[self.metric]        
         
         candidates, unique_ids = self.candidates, self.unique_ids
-        bloom_filters = encoded_data.encoded_dict
+        bloom_filters = encoded_data.bitarray_dict
         attributes = self.attributes if self.attributes else encoded_data.attributes
-        bf_length = encoded_data.bitarray_length
+        bf_length = encoded_data.length
         n_attributes = len(attributes)
 
         id_to_idx = {eid: idx for idx, eid in enumerate(unique_ids)}
@@ -180,7 +206,7 @@ class Matcher:
         # Fill the bloom matrix
         for eid_idx, eid in enumerate(unique_ids):
             for attr_idx, attr in enumerate(attributes):
-                bitarr = bloom_filters[eid][attr].bitarray
+                bitarr = bloom_filters[eid][attr]
                 bloom_matrix[eid_idx, attr_idx] = np.array(bitarr.tolist(), dtype=np.uint8)
         
         # Prepare candidate indices
@@ -197,9 +223,45 @@ class Matcher:
             blooms_1 = bloom_matrix[batch_pairs[:,0]]
             blooms_2 = bloom_matrix[batch_pairs[:,1]]
             avg_similarities : np.array = self._metric(blooms_1, blooms_2)
+            i, j = batch_pairs[0]
+            print(f"{idx_to_id[i]}, {idx_to_id[j]} {avg_similarities}")
+            
             edges = [(idx_to_id[i], idx_to_id[j], float(sim))
                     for (i,j), sim in zip(batch_pairs, avg_similarities)
                     if sim >= self.threshold]
             graph.add_weighted_edges_from(edges)
 
         return graph
+    
+    def evaluate(self, 
+                prediction : Graph,
+                export_to_df: bool = False,
+                export_to_dict: bool = False,
+                with_classification_report: bool = False,
+                verbose: bool = True) -> any:
+
+        if self.encoded_data is None:
+            raise AttributeError("Can not proceed to evaluation without data object.")
+
+        if self.skip_ground_truth:
+            raise AttributeError("Can not proceed to evaluation without a ground-truth file. " +
+                    "Encoded Data object the ground-truth file has not been set.")
+
+        eval_obj = Evaluation(self.encoded_data)
+        true_positives = 0
+        total_matching_pairs = prediction.number_of_edges()
+        for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
+            if (id1 in prediction and id2 in prediction[id1]) or   \
+                 (id2 in prediction and id1 in prediction[id2]):
+                true_positives += 1
+
+        eval_obj.calculate_scores(true_positives=true_positives,
+                                  total_matching_pairs=total_matching_pairs)
+        return eval_obj.report(self.method_configuration(),
+                                export_to_df,
+                                export_to_dict,
+                                with_classification_report,
+                                verbose)
+        
+    def stats(self) -> None:
+        pass
