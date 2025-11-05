@@ -3,7 +3,7 @@ This file contains all the methods for evaluating every module in pyjedai.
 """
 from decimal import DivisionByZero
 from typing import Type
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from warnings import warn
 
 import matplotlib.pyplot as plt
@@ -15,6 +15,7 @@ import numpy as np
 from .datamodel import EncodedData
 
 
+from src.pprl.datamodel import Block
 from .utils import batch_pairs
 from math import inf
 from .utils import PredictionData
@@ -154,25 +155,22 @@ class Evaluation:
 
         return entity_index
 
-    def _create_entity_index_from_blocks(
+    def create_entity_index_from_blocks(
             self,
-            blocks: dict
+            blocks: Dict[any, Block]
     ) -> dict:
-        entity_index = dict()
+        """Used for evaluating blocking techniques. Evaluating only for 2 datasets"""
+        entity_index : Dict[int, set] = {}
         for block_id, block in blocks.items():
-            for entity_id in block.entities_D1:
+            for entity_id in block.entities['D0']:
                 entity_index.setdefault(entity_id, set())
                 entity_index[entity_id].add(block_id)
 
-            if not self.data.is_dirty_er:
-                for entity_id in block.entities_D2:
-                    entity_index.setdefault(entity_id, set())
-                    entity_index[entity_id].add(block_id)
+            for entity_id in block.entities['D1']:
+                entity_index.setdefault(entity_id, set())
+                entity_index[entity_id].add(block_id)
 
-            if self.data.is_dirty_er:
-                self.total_matching_pairs += len(block.entities_D1)*(len(block.entities_D1)-1)/2
-            else:
-                self.total_matching_pairs += len(block.entities_D1)*len(block.entities_D2)
+            self.total_matching_pairs += len(block.entities['D0'])*len(block.entities['D1'])
 
         return entity_index
 

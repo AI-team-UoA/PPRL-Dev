@@ -1,26 +1,28 @@
+"""Blocking methods for our tool"""
 import random
-import numpy as np
-from bitarray import bitarray
 from collections import defaultdict
-from typing import List, Dict, Union, Literal
-from pybloom_live import BloomFilter as Bloom  
-from src.pprl.datamodel import  Block, PPRLFeature, BloomEncodedData
+from typing import List, Dict, Union
 import time
 from abc import abstractmethod
 from functools import reduce
 import operator
-from src.pprl.utils import _drop_single_entity_blocks
 import faiss
+from bitarray import bitarray
+import numpy as np
+from src.pprl.utils import _drop_single_entity_blocks, are_matching, get_blocks_cardinality
+from src.pprl.datamodel import  Block, PPRLFeature, BloomEncodedData, EncodedData
+from src.pprl.evaluation import Evaluation
 
 
 class AbstractBlockProcessing(PPRLFeature):
     """ 
     Abstract Class for blocking 
     """
-
     def __init__(self):
         super().__init__()
         self.blocks : dict
+        self.attributes : list
+        self.encoded_data : EncodedData
 
     def report(self) -> None:
         """Prints Block Building method configuration
@@ -28,61 +30,62 @@ class AbstractBlockProcessing(PPRLFeature):
         print(
             "Method name: " + self._method_name +
             "\nMethod info: " + self._method_info +
-            ("\nParameters: \n" + ''.join(['\t{0}: {1}\n'.format(k, v) for k, v in self._configuration().items()]) if self._configuration().items() else "\nParameters: Parameter-Free method\n") +
-            "Attributes from D1:\n\t" + ', '.join(c for c in (self.attributes_1 if self.attributes_1 is not None \
-                else self.data.dataset_1.columns)) +
-            ("\nAttributes from D2:\n\t" + ', '.join(c for c in (self.attributes_2 if self.attributes_2 is not None \
-                else self.data.dataset_2.columns)) if not self.data.is_dirty_er else "") +
-            "\nRuntime: {:2.4f} seconds".format(self.execution_time)
+            ("\nParameters: \n" + ''.join([f'\t{k}: {v}\n' for k, v in self._configuration().items()])
+             if self._configuration().items() else "\nParameters: Parameter-Free method\n") +
+            "Attributes:\n\t" + ', '.join(c for c in self.attributes) +
+            f"\nRuntime: {self.execution_time:2.4f} seconds"
         )
-
-    """
-    def _serial_evaluate(self, entity_index) -> int:
+    
+    def _serial_evaluate(self, entity_index: dict): 
         true_positives = 0
-        for _, (id1, id2) in self.data.ground_truth.iterrows():
-            id1 = self.data._ids_mapping_1[id1]
-            id2 = self.data._ids_mapping_1[id2] if self.data.is_dirty_er else self.data._ids_mapping_2[id2]
+        for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
+            id2 = id2 + self.encoded_data.bounds[0]
             if id1 in entity_index and    \
-                id2 in entity_index and are_matching(entity_index, id1, id2):
-                    true_positives += 1 
+            id2 in entity_index and are_matching(entity_index, id1, id2):
+                true_positives += 1
 
         return true_positives
-    
 
     def evaluate(self,
-                 prediction,
-                 export_to_df: bool = False,
-                 export_to_dict: bool = False,
-                 with_classification_report: bool = False,
-                 verbose: bool = True,
-                 with_stats: bool = False) -> any:
-
+            prediction,
+            export_to_df: bool = False,
+            export_to_dict: bool = False,
+            with_classification_report: bool = False,
+            verbose: bool = True,
+            with_stats: bool = False) -> any:
+        """Function to evaluate blocking methods f1-score, recall and precision
+        
+        Args: 
+            prediction (dict) : Blocks predicted from the blocking method
+            export_to_df (bool) : Create evaluation dataframe
+            export_to_dict (bool) : Create evaluation dictionary
+            with_classification_report (bool) : Printing Info for the blocking method
+            with_stats (bool) : Printing Method's Statistics
+        
+        Returns:
+            Evaluation : Evaluation Object with F1, Recall, Precision etc.
+        """
         if prediction is None:
             if self.blocks is None:
                 raise AttributeError("Can not proceed to evaluation without build_blocks.")
-            else:
-                eval_blocks = self.blocks
+            eval_blocks = self.blocks
         else:
             eval_blocks = prediction
-            
-        if self.data is None:
+
+        if self.encoded_data is None:
             raise AttributeError("Can not proceed to evaluation without data object.")
 
-        if self.data.ground_truth is None:
-            raise AttributeError("Can not proceed to evaluation without a ground-truth file. " + 
+        if self.encoded_data.skip_ground_truth:
+            raise AttributeError("Can not proceed to evaluation without a ground-truth file."
                     "Data object has not been initialized with the ground-truth file")
 
-        eval_obj = Evaluation(self.data)
-        entity_index = eval_obj._create_entity_index_from_blocks(eval_blocks)
-        
-        if self.disable_ray and self.disable_eval_ray: 
-            true_positives = self._serial_evaluate(entity_index)
-        else: 
-            true_positives = self._ray_evaluate(entity_index)
-              
-        
-        total_matching_pairs = get_blocks_cardinality(eval_blocks, self.data.is_dirty_er)
-        eval_obj.calculate_scores(true_positives=true_positives, total_matching_pairs=total_matching_pairs)
+        eval_obj = Evaluation(self.encoded_data)
+        entity_index = eval_obj.create_entity_index_from_blocks(eval_blocks)
+        true_positives = self._serial_evaluate(entity_index)
+
+        total_matching_pairs = get_blocks_cardinality(eval_blocks)
+        eval_obj.calculate_scores(true_positives=true_positives,
+                                total_matching_pairs=total_matching_pairs)
         eval_result = eval_obj.report(self.method_configuration(),
                                 export_to_df,
                                 export_to_dict,
@@ -91,7 +94,6 @@ class AbstractBlockProcessing(PPRLFeature):
         if with_stats:
             self.stats(eval_blocks)
         return eval_result
-        """
     
     def stats(self, blocks: dict, verbose: bool = True) -> dict:
         return None

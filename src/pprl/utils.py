@@ -1,10 +1,34 @@
+from typing import List, Tuple, Dict
 import numpy as np
-from typing import List
 from src.pprl.datamodel import Block
 from abc import ABC
-from typing import Tuple
 import uuid
 from networkx import Graph
+
+
+def get_blocks_cardinality(blocks: Dict[str, Block]) -> int:
+    """Returns the cardinality of the blocks.
+
+    Args:
+        blocks (dict): Blocks.
+
+    Returns:
+        int: Cardinality.
+    """
+    return sum([block.get_cardinality() for block in blocks.values()])
+
+def are_matching(entity_index : Dict[int, set], id1, id2) -> bool:
+    '''
+    id1 and id2 consist a matching pair if:
+    - Blocks: intersection > 0 (comparison of sets)
+    - Clusters: cluster-id-j == cluster-id-i (comparison of integers)
+    '''
+
+    if len(entity_index) < 1:
+        raise ValueError("No entities found in the provided index")
+    if isinstance(list(entity_index.values())[0], set): # Blocks case
+        return not entity_index[id1].isdisjoint(entity_index[id2])
+    return entity_index[id1] == entity_index[id2] # Clusters case
 
 def batch_pairs(iterable, batch_size: int = 1):
     """

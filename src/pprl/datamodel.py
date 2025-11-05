@@ -375,20 +375,19 @@ class Block:
         Consists of 2 sets of profile entities 1 for Dirty ER and 2 for Clean-Clean ER.
     """
     def __init__(self) -> None:
-        self.entities : Dict[str, OrderedSet] = defaultdict(OrderedSet)
+        # self.entities = {"D0": OrderedSet, "D1": OrederedSet, ...}
+        self.entities : Dict[str, OrderedSet] = defaultdict(OrderedSet)  
 
-    # def get_cardinality(self, is_dirty_er) -> int:
-    #     """Returns block cardinality.
+    def get_cardinality(self) -> int:
+        """Returns block cardinality.
 
-    #     Args:
-    #         is_dirty_er (bool): Dirty or Clean-Clean ER.
+        Args:
+            is_dirty_er (bool): Dirty or Clean-Clean ER.
 
-    #     Returns:
-    #         int: Cardinality
-    #     """
-    #     if is_dirty_er:
-    #         return len(self.entities_D1)*(len(self.entities_D1)-1)/2
-    #     return len(self.entities_D1) * len(self.entities_D2)
+        Returns:
+            int: Cardinality
+        """
+        return len(self.entities['D0']) * len(self.entities['D1'])
 
     # def get_size(self) -> int:
     #     """Returns block size.
