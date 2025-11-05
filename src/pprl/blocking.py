@@ -1,4 +1,4 @@
-"""Blocking methods for our tool"""
+"""PPRL Blocking Methods"""
 import random
 from collections import defaultdict
 from typing import List, Dict, Union
