@@ -365,6 +365,11 @@ class FAISSBlocking(AbstractBlockBuilding):
         distances (np.array): Array containing distances to neighbors from FAISS search.
     """
 
+    _method_name = "FAISS Blocking"
+    _method_short_name: str = "FAISS"
+    _method_info = "Faiss blocking."
+
+
     def __init__(self):
         super().__init__()
         self.vector_size: int
@@ -428,3 +433,46 @@ class FAISSBlocking(AbstractBlockBuilding):
 
     def _clean_blocks(self, blocks):
         return blocks
+
+    def evaluate(self,
+                 prediction : dict,
+                 export_to_df: bool = False,
+                 with_classification_report: bool = False,
+                 verbose: bool = True) -> any:
+        """Function to evaluate meta-blocking methods f1-score, recall and precision
+
+        Args:
+            prediction (dict) : Blocks predicted from the blocking method
+            export_to_df (bool) : Create evaluation dataframe
+            with_classification_report (bool) : Printing Info for the blocking method
+            with_stats (bool) : Printing Method's Statistics
+
+        Returns:
+            Evaluation : Evaluation Object with F1, Recall, Precision etc.
+        """
+
+        if self.encoded_data is None:
+            raise AttributeError("Can not proceed to evaluation without data object.")
+
+        if self.encoded_data.skip_ground_truth:
+            raise AttributeError("Can not proceed to evaluation without a ground-truth file."
+                        "Data object has not been initialized with the ground-truth file")
+
+        eval_obj = Evaluation(self.encoded_data)
+        true_positives = 0
+        total_matching_pairs = 0
+        for block in prediction.values():
+            total_matching_pairs += len(block)
+
+        for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
+            id2 = self.encoded_data.bounds[0] + id2
+            if (id1 in prediction and id2 in prediction[id1]) or   \
+                (id2 in prediction and id1 in prediction[id2]):
+                true_positives += 1
+
+        eval_obj.calculate_scores(true_positives=true_positives,
+                                  total_matching_pairs=total_matching_pairs)
+        return eval_obj.report(self.method_configuration(),
+                                export_to_df,
+                                with_classification_report,
+                                verbose)

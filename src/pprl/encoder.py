@@ -1,10 +1,24 @@
 """PPRL Encoders Class"""
-from typing import List, Literal, Dict, Set
+from dataclasses import dataclass
+from typing import List, Literal, Dict, Set, Optional
 import re
 import hashlib
 import pandas as pd
 from metaphone import doublemetaphone
 from src.pprl.datamodel import BloomEncodedData
+
+@dataclass
+class BloomFilterConfig:
+    """Configuration class for Bloom Filters"""
+    size: int = 1024
+    num_hashes: int = 20
+    offset: int = 0
+    hashing_type : Literal["salted_string", "salted_qgrams",
+            "salted_skipqgrams", "salted_metaphone",
+            "salted_tokens"] = "salted_string"
+    qgrams : int = 5
+    salt : str = ""
+    attributes : Optional[List[str]] = None
 
 
 class BloomFilter:
@@ -21,17 +35,7 @@ class BloomFilter:
         "salted_tokens"
     ]
 
-    def __init__(self,
-        size : int = 1024,
-        num_hashes: int = 20,
-        offset : int = 0,
-        hashing_type : Literal["salted_string", "salted_qgrams",
-                    "salted_skipqgrams", "salted_metaphone",
-                "salted_tokens"] = "salted_string",
-        qgrams : int = 5,
-        salt : str = "",
-        attributes : List[str] = None,
-    ):
+    def __init__(self, config: BloomFilterConfig):
         """
         Initialize Bloom filter encoder.
 
@@ -46,40 +50,53 @@ class BloomFilter:
             attributes: Specific attributes to encode
         """
 
+
+
+        self.size : int  = config.size
+        self.num_hashes : int = config.num_hashes
+        self.offset : int = config.offset
+        self.qgrams = config.qgrams
+        self.salt = config.salt
+        self.attributes = config.attributes
+        self.hashing_type = config.hashing_type
+
+
+
+    def hash(self, str_to_enc: str) -> List[int]:
+        """Return Bloom filter bit positions 
+        for the given string using the selected hashing method.
+        
+        Args: 
+            str_to_enc (str): String to encode
+        
+        Returns: 
+            List[int]: List of the positive bits 
+        """
         encoder_dict = {
-            "salted_string" : self._salted_string,
-            "salted_qgrams" : self._salted_qgrams,
-            "salted_skipqgrams" : self._salted_skipqgrams,
-            "salted_metaphone" : self._salted_metaphone,
-            "salted_tokens" : self._salted_token,
+            "salted_string" : lambda: self._salted_string(str_to_enc),
+            "salted_qgrams" : lambda: self._salted_qgrams(str_to_enc),
+            "salted_skipqgrams" : lambda: self._salted_skipqgrams(str_to_enc),
+            "salted_metaphone" : lambda: self._salted_metaphone(str_to_enc),
+            "salted_tokens" : lambda: self._salted_token(str_to_enc),
         }
-
-        self.size : int  = size
-        self.num_hashes : int = num_hashes
-        self.offset : int = offset
-        self.qgrams = qgrams
-        self.salt = salt
-        self.attributes = attributes
-        self._hash = encoder_dict[hashing_type]
-
-
+        return encoder_dict[self.hashing_type]()
 
     def _create_bloom_dict_for_row(self, row : pd.Series) -> Dict[str, List[int]]:
         bloom_dict = {}
         if self.attributes:
             for attribute in self.attributes:
-                bloom_dict[attribute] = self._hash(str(row[attribute]))
+                bloom_dict[attribute] = self.hash(str(row[attribute]))
         else:
             flatten_row : list = row.values.tolist()
             flatten_row = " ".join(str(x) for x in flatten_row)
-            bloom_dict['row'] = self._hash(flatten_row)
+            bloom_dict['row'] = self.hash(flatten_row)
         return bloom_dict
 
 
     def _encode(self, df: pd.DataFrame) -> BloomEncodedData:
-        bloom_dict = dict()
-        for id, (_, row) in enumerate(df.iterrows()):
-            bloom_dict[id] = self._create_bloom_dict_for_row(row)
+        bloom_dict = {}
+        for i, (_, row) in enumerate(df.iterrows()):
+            bloom_dict[i] = self._create_bloom_dict_for_row(row)
         return BloomEncodedData(data = bloom_dict, length=self.size + self.offset, )  #leng
 
     def _hash_token(self, bf: Set[int],  salted_token: str, hash_token : bool = True):
@@ -109,8 +126,7 @@ class BloomFilter:
                     segment = hashed[start_idx:start_idx + 4]
                     position = (int.from_bytes(segment, 'little') % self.size) + self.offset
                     bf.add(position)
-                # position = (int.from_bytes(hashed, 'little') % self.size) + self.offset
-                # bf.add(position)
+
         return [*bf]
 
 
@@ -136,15 +152,18 @@ class BloomFilter:
         return [*bf]
 
     def _salted_skipqgrams(self, str_to_enc: str) -> List[int]:
-        """" Gets two different strings one without the chars in the odd positions and ove without the even ones.
-        If the string is shorter of qgrams, # is added for creating the qgrams """
+        """" Gets two different strings
+        one without the chars in the odd positions
+        and one without the even ones.
+        If the string is shorter of qgrams,
+        # is added for creating the qgrams """
 
         bf = set()
 
         tokens = self._tokenize(str_to_enc)
         for token in tokens:
             for i in range(self.num_hashes):
-                salted_token: str = (self.salt + str(i) +  token)
+                salted_token: str = self.salt + str(i) +  token
                 skipped_tokens : List[str] = [salted_token[1::2], salted_token[::2]]
                 for skipped_token in skipped_tokens:
                     utf_8_token = skipped_token.encode('utf-8')
@@ -159,7 +178,7 @@ class BloomFilter:
         tokens = self._tokenize(str_to_enc)
         for token in tokens:
             for i in range(self.num_hashes):
-                salted_token : str = (self.salt + str(i) + token)
+                salted_token : str = self.salt + str(i) + token
                 double_metaphone = doublemetaphone(salted_token)
 
                 if len(double_metaphone[0]) == 0 and len(double_metaphone[1])  == 0:
@@ -195,6 +214,16 @@ class BloomFilter:
 
 
     def encode(self, df: pd.DataFrame) -> BloomEncodedData:
+        """Encoding Data to Bloom Filters.
+        Attributes must be the same with the other datasets,
+        that are gonna be matched.
+
+        Args:
+            df (pd.DataFrame): Dataset to be encoded
+
+        Returns:
+            BloomEncodedData: An object with bloomfilters of your data
+        """
         columns = list(df.columns)
         if self.attributes:
             for col in self.attributes:
@@ -258,8 +287,10 @@ class BloomFilter:
 #         return homomorphic_vector
 
 #     def _encode(self) -> HomomorphicEcnodedData:
-#         df_1 : pd.DataFrame = self.data.dataset_1[self.attributes] if self.attributes else self.data.dataset_1
-#         df_2 : pd.DataFrame = self.data.dataset_2[self.attributes] if self.attributes else self.data.dataset_2
+#         df_1 : pd.DataFrame =
+# self.data.dataset_1[self.attributes] if self.attributes else self.data.dataset_1
+#         df_2 : pd.DataFrame =
+#  self.data.dataset_2[self.attributes] if self.attributes else self.data.dataset_2
 #         homomorphic_vector = dict()
 #         for id, (_, row) in enumerate(df_1.iterrows()):
 #             homomorphic_vector[id] = self._create_vector_for_row(row)
@@ -278,8 +309,10 @@ class BloomFilter:
 #                 if col not in columns_1 or col not in columns_2:
 #                     raise ValueError("Attributes must be the same between the two dataframes")
 #         else:
-#             upperset : set = set(columns_1) if len(set(columns_1)) > len(set(columns_2)) else set(columns_2)
-#             subset : set = set(columns_1) if len(set(columns_1)) <= len(set(columns_2)) else set(columns_2)
+#             upperset : set =
+# set(columns_1) if len(set(columns_1)) > len(set(columns_2)) else set(columns_2)
+#             subset : set =
+# set(columns_1) if len(set(columns_1)) <= len(set(columns_2)) else set(columns_2)
 #             self.attributes = list(subset) if subset.issubset(upperset) else None
 #         print(f'Encrypting these attributes: {self.attributes}')
 

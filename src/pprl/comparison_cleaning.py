@@ -1,5 +1,6 @@
 """PPRL Metablocking Methods"""
-
+import sys
+from queue import PriorityQueue
 from itertools import chain
 from collections import defaultdict
 from math import log10, sqrt
@@ -8,7 +9,7 @@ from abc import ABC, abstractmethod
 from typing import Dict
 import pandas as pd
 import numpy as np
-
+from tqdm import tqdm
 from src.pprl.evaluation import Evaluation
 from src.pprl.datamodel import BloomEncodedData, PPRLFeature
 from src.pprl.utils import chi_square
@@ -44,7 +45,7 @@ class AbstractComparisonCleaning(PPRLFeature):
 
         self.candidate_pairs : Dict[int, set] = defaultdict(set)
 
-        for attr in encoded_data.attributes:
+        for attr in tqdm(encoded_data.attributes, desc="Encoding attributes", position=0):
             self._entity_index, self._inverted_index = encoded_data.to_entities(attr)
             self.candidate_pairs = self._apply_main_processing()
 
@@ -261,6 +262,12 @@ class AbstractMetablocking(AbstractComparisonCleaning, ABC):
             if (entity_id < _limit) else \
                 self._inverted_index[block_id][0]
 
+    def _get_bit_assignmets(self) -> int:
+        bit_assignments = 0
+        for datasets_dict in self._inverted_index.values():
+            bit_assignments += len(datasets_dict[0]) + len(datasets_dict[1])
+        return bit_assignments
+
     @abstractmethod
     def _set_threshold(self):
         pass
@@ -289,8 +296,9 @@ class WeightedEdgePruning(AbstractMetablocking):
         self._retained_neighbors: set = set()
 
     def _prune_edges(self) -> dict:
-        _limit = self.encoded_data.bounds[0]
-        for i in range(0, _limit):
+        _limit = self.encoded_data.bounds[0] if not self._node_centric \
+            else len(self.encoded_data.encoded_dict) 
+        for i in tqdm(range(0, _limit), desc=f"Processing entities", position=1, leave=False):
             self._process_entity(i)
             self._verify_valid_entities(i)
 
@@ -331,7 +339,8 @@ class WeightedEdgePruning(AbstractMetablocking):
     def _set_threshold(self):
         self._num_of_edges = 0.0
         self._threshold = 0.0
-        _limit = self.encoded_data.bounds[0]
+        _limit = self.encoded_data.bounds[0] if not self._node_centric \
+            else len(self.encoded_data.encoded_dict)
         for i in range(_limit):
             self._process_entity(i)
             self._update_threshold(i)
@@ -357,3 +366,244 @@ class WeightedEdgePruning(AbstractMetablocking):
             "Node centric" : self._node_centric,
             "Weighting scheme" : self.weighting_scheme
         }
+
+
+class CardinalityEdgePruning(WeightedEdgePruning):
+    """A Meta-blocking method that retains the comparisons \
+        that correspond to the top-K weighted edges in the bit graph.
+    """
+
+    _method_name = "Cardinality Edge Pruning"
+    _method_short_name: str = "CEP"
+    _method_info = "A Meta-blocking method that retains the comparisons " + \
+                        "that correspond to the top-K weighted edges in the bit graph."
+
+    def __init__(self, weighting_scheme: str = 'JS') -> None:
+        super().__init__(weighting_scheme)
+        self._minimum_weight: float = sys.float_info.min
+        self._top_k_edges: PriorityQueue
+
+    def _prune_edges(self) -> dict:
+        _limit = self.encoded_data.bounds[0] if not self._node_centric \
+            else len(self.encoded_data.encoded_dict)
+        
+        self._top_k_edges = PriorityQueue(int(2*self._threshold))
+        for i in range(0, _limit):
+            self._process_entity(i)
+            self._verify_valid_entities(i)
+        while not self._top_k_edges.empty():
+            comparison = self._top_k_edges.get()
+            self.candidate_pairs[comparison[1]].add(comparison[2])
+
+        return self.candidate_pairs
+
+    def _set_threshold(self) -> None:
+        bit_assignments = self._get_bit_assignmets()
+        self._threshold = bit_assignments / 2
+
+    def _verify_valid_entities(self, entity_id: int) -> None:
+        if entity_id not in self._entity_index:
+            return
+
+        for neighbor_id in self._valid_entities:
+            weight = self._get_weight(entity_id, neighbor_id)
+            if weight >= self._minimum_weight:
+                self._top_k_edges.put(
+                    (weight, entity_id, neighbor_id)
+                )
+                if self._threshold < self._top_k_edges.qsize():
+                    self._minimum_weight = self._top_k_edges.get()[0]
+
+class CardinalityNodePruning(CardinalityEdgePruning):
+    """A Meta-blocking method that retains for every entity, \
+        the comparisons that correspond to its top-k weighted edges in the blocking graph."
+    """
+
+    _method_name = "Cardinality Node Pruning"
+    _method_short_name: str = "CNP"
+    _method_info = "A Meta-blocking method that retains for every entity, " + \
+                    "the comparisons that correspond to its top-k" + \
+                    " weighted edges in the blocking graph."
+    def __init__(self, weighting_scheme: str = 'CBS') -> None:
+        super().__init__(weighting_scheme)
+        self._nearest_entities: dict
+        self._node_centric = True
+        self._top_k_edges: PriorityQueue
+        self._number_of_nearest_neighbors : int = None
+
+    def _prune_edges(self) -> dict:
+        _limit = self.encoded_data.bounds[0] if not self._node_centric \
+            else len(self.encoded_data.encoded_dict)
+        
+        self._nearest_entities = {}
+        for i in range(0, _limit):
+            self._process_entity(i)
+            self._verify_valid_entities(i)
+        return self._retain_valid_comparisons()
+
+    def _retain_valid_comparisons(self) -> dict:
+        self.candidate_pairs = defaultdict(set)
+        num_of_entities = len(self.encoded_data.encoded_dict)
+        for i in range(0, num_of_entities):
+            if i in self._nearest_entities:
+                for neighbor_id in self._nearest_entities[i]:
+                    # Comparison is a triple: (id1, id2, weight)
+                    if self._is_valid_comparison(i, neighbor_id):
+                        self.candidate_pairs[i].add(neighbor_id)
+        return self.candidate_pairs
+
+    def _is_valid_comparison(self, entity_id: int, neighbor_id: int) -> bool:
+        if neighbor_id not in self._nearest_entities:
+            return True
+        if entity_id in self._nearest_entities[neighbor_id]:
+            return entity_id < neighbor_id
+        return True
+
+    def _set_threshold(self) -> None:
+        if self._number_of_nearest_neighbors is None:
+            num_of_entities = len(self.encoded_data.encoded_dict)
+            bit_assignments = self._get_bit_assignmets()
+            self._threshold = max(1, bit_assignments / num_of_entities)
+        else:
+            self._threshold = self._number_of_nearest_neighbors
+
+    def _verify_valid_entities(self, entity_id: int) -> None:
+        if entity_id not in self._entity_index:
+            return
+        self._top_k_edges = PriorityQueue(int(2*self._threshold))
+        self._minimum_weight = sys.float_info.min
+        for neighbor_id in self._valid_entities:
+            weight = self._get_weight(entity_id, neighbor_id)
+            if weight >= self._minimum_weight:
+                self._top_k_edges.put(
+                    (weight, entity_id, neighbor_id)
+                )
+                if self._threshold < self._top_k_edges.qsize():
+                    self._minimum_weight = self._top_k_edges.get()[0]
+        if self._top_k_edges:
+            self._nearest_entities.setdefault(entity_id, set())
+        while not self._top_k_edges.empty():
+            comparison = self._top_k_edges.get()
+            self._nearest_entities[entity_id].add(comparison[2])
+
+
+class ReciprocalCardinalityNodePruning(CardinalityNodePruning):
+    """A Meta-blocking method that retains the comparisons \
+        that correspond to edges in the blocking graph that are among the top-k weighted  \
+        ones for both adjacent entities/nodes.
+    """
+
+    _method_name = "Reciprocal Cardinality Node Pruning"
+    _method_short_name: str = "RCNP"
+    _method_info = "A Meta-blocking method that retains the comparisons " + \
+                    "that correspond to edges in the blocking graph that are among " + \
+                    "the top-k weighted ones for both adjacent entities/nodes."
+
+    def __init__(self, weighting_scheme: str = 'CN-CBS') -> None:
+        super().__init__(weighting_scheme)
+
+    def _is_valid_comparison(self, entity_id: int, neighbor_id: int) -> bool:
+        if neighbor_id not in self._nearest_entities:
+            return False
+        if entity_id in self._nearest_entities[neighbor_id]:
+            return  entity_id < neighbor_id
+        return False
+
+class WeightedNodePruning(WeightedEdgePruning):
+    """A Meta-blocking method that retains for every entity, the comparisons \
+        that correspond to edges in the blocking graph that are exceed \
+        the average edge weight in the respective node neighborhood.
+    """
+
+    _method_name = "Weighted Node Pruning"
+    _method_short_name: str = "WNP"
+    _method_info = "A Meta-blocking method that retains for every entity, the comparisons \
+                    that correspond to edges in the blocking graph that are exceed \
+                    the average edge weight in the respective node neighborhood."
+
+    def __init__(self, weighting_scheme: str = 'CBS') -> None:
+        super().__init__(weighting_scheme)
+        self._average_weight: np.array
+        self._node_centric = True
+
+    def _get_valid_weight(self, entity_id: int, neighbor_id: int) -> float:
+        weight = self._get_weight(entity_id, neighbor_id)
+        return weight if ((self._average_weight[entity_id] <= weight or \
+                             self._average_weight[neighbor_id] <= weight) and
+                                entity_id < neighbor_id) else 0
+
+    def _set_threshold(self):
+        _limit = self.encoded_data.bounds[0] if not self._node_centric \
+            else len(self.encoded_data.encoded_dict)
+        
+        self._average_weight = np.zeros(_limit, dtype=float)
+        for i in range(0, _limit):
+            self._process_entity(i)
+            self._update_threshold(i)
+
+    def _update_threshold(self, entity_id: int) -> None:
+        if entity_id not in self._entity_index:
+            return
+        self._average_weight[entity_id] = 0.0
+        for neighbor_id in self._valid_entities:
+            self._average_weight[entity_id] += super()._get_weight(entity_id, neighbor_id)
+        self._average_weight[entity_id] /= len(self._valid_entities)
+
+    def _verify_valid_entities(self, entity_id: int) -> None:
+        if entity_id not in self._entity_index:
+            return
+        self._retained_neighbors.clear()
+        for neighbor_id in self._valid_entities:
+            _weight = self._get_valid_weight(entity_id, neighbor_id)
+            if _weight:
+                self._retained_neighbors.add(neighbor_id)
+        if len(self._retained_neighbors) > 0:
+            self.candidate_pairs[entity_id] = self._retained_neighbors.copy()
+
+class BLAST(WeightedNodePruning):
+    """Meta-blocking method that retains the comparisons \
+        that correspond to edges in the blocking graph that are exceed 1/4 of the sum \
+        of the maximum edge weights in the two adjacent node neighborhoods.
+    """
+
+    _method_name = _method_short_name = "BLAST"
+    _method_info = "Meta-blocking method that retains the comparisons " + \
+                "that correspond to edges in the blocking graph that are exceed 1/4 of the sum " + \
+                "of the maximum edge weights in the two adjacent node neighborhoods."
+
+    def __init__(self, weighting_scheme: str = 'X2') -> None:
+        super().__init__(weighting_scheme)
+
+    def _get_valid_weight(self, entity_id: int, neighbor_id: int) -> float:
+        weight = self._get_weight(entity_id, neighbor_id)
+        edge_threshold = (self._average_weight[entity_id] + self._average_weight[neighbor_id]) / 4
+        return edge_threshold <= weight and entity_id < neighbor_id
+
+    def _update_threshold(self, entity_id: int) -> None:
+        if entity_id not in self._entity_index:
+            return
+        self._average_weight[entity_id] = 0.0
+        for neighbor_id in self._valid_entities:
+            self._average_weight[entity_id] = \
+                max(self._average_weight[entity_id], self._get_weight(entity_id, neighbor_id))
+
+class ReciprocalWeightedNodePruning(WeightedNodePruning):
+    """Meta-blocking method that retains the comparisons\
+        that correspond to edges in the blocking graph that are \
+        exceed the average edge weight in both adjacent node neighborhoods.
+    """
+
+    _method_name = "Reciprocal Weighted Node Pruning"
+    _method_short_name: str = "RWNP"
+    _method_info = "Meta-blocking method that retains the comparisons " + \
+                    "that correspond to edges in the blocking graph that are " + \
+                    "exceed the average edge weight in both adjacent node neighborhoods."
+
+    def __init__(self, weighting_scheme: str = 'CN-CBS') -> None:
+        super().__init__(weighting_scheme)
+
+    def _get_valid_weight(self, entity_id: int, neighbor_id: int) -> float:
+        weight = self._get_weight(entity_id, neighbor_id)
+        return weight if ((self._average_weight[entity_id] <= weight and \
+                             self._average_weight[neighbor_id] <= weight) and
+                                entity_id < neighbor_id) else 0

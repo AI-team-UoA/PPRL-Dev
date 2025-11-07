@@ -38,9 +38,17 @@ class Matcher(PPRLFeature):
         unique_ids = OrderedSet()
 
         if isinstance(extract_candidates, dict):
-            for _, block in extract_candidates.items():
-                for d1, d2 in combinations(block.entities.values(), 2):
-                    for eid1, eid2 in product(d1, d2):
+            first_key, first_value = next(iter(extract_candidates.items()))
+            if isinstance(first_value, Block):
+                for _, block in extract_candidates.items():
+                    for d1, d2 in combinations(block.entities.values(), 2):
+                        for eid1, eid2 in product(d1, d2):
+                            candidates.add((eid1,eid2))
+                            unique_ids.add(eid1)
+                            unique_ids.add(eid2)
+            else: 
+                for eid1, eid2s in extract_candidates.items():
+                    for eid2 in eid2s:
                         candidates.add((eid1,eid2))
                         unique_ids.add(eid1)
                         unique_ids.add(eid2)
@@ -106,6 +114,7 @@ class Matcher(PPRLFeature):
             self.ground_truth = encoded_data.ground_truth
         
         self.candidates, self.unique_ids = self._candidates(blocks) if blocks else self._candidates(encoded_data)
+
 
         if not self.candidates:
             gragh = Graph()
@@ -176,7 +185,6 @@ class Matcher(PPRLFeature):
                 similarity += matching_function(self.cc, self.key_pair,
                                                encoded_1[attr], encoded_2[attr])
             avg_similarity = similarity / len(attributes)
-            print(id1, id2, avg_similarity)
             if avg_similarity >= self.threshold: 
                graph.add_edge(id1, id2, weight=avg_similarity)           
         
@@ -224,7 +232,6 @@ class Matcher(PPRLFeature):
             blooms_2 = bloom_matrix[batch_pairs[:,1]]
             avg_similarities : np.array = self._metric(blooms_1, blooms_2)
             i, j = batch_pairs[0]
-            print(f"{idx_to_id[i]}, {idx_to_id[j]} {avg_similarities}")
             
             edges = [(idx_to_id[i], idx_to_id[j], float(sim))
                     for (i,j), sim in zip(batch_pairs, avg_similarities)
@@ -251,6 +258,7 @@ class Matcher(PPRLFeature):
         true_positives = 0
         total_matching_pairs = prediction.number_of_edges()
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
+            id2 = self.encoded_data.bounds[0] + id2
             if (id1 in prediction and id2 in prediction[id1]) or   \
                  (id2 in prediction and id1 in prediction[id2]):
                 true_positives += 1
@@ -259,7 +267,6 @@ class Matcher(PPRLFeature):
                                   total_matching_pairs=total_matching_pairs)
         return eval_obj.report(self.method_configuration(),
                                 export_to_df,
-                                export_to_dict,
                                 with_classification_report,
                                 verbose)
         
