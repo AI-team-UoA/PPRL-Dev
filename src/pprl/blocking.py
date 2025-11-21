@@ -10,7 +10,8 @@ import faiss
 from bitarray import bitarray
 import numpy as np
 from src.pprl.utils import _drop_single_entity_blocks, are_matching, get_blocks_cardinality
-from src.pprl.datamodel import  Block, PPRLFeature, BloomEncodedData, EncodedData
+from src.pprl.datamodel import  Block, PPRLFeature, EncodedData
+from src.pprl.encoded_data import BloomEncodedData
 from src.pprl.evaluation import Evaluation
 
 
@@ -372,7 +373,6 @@ class FAISSBlocking(AbstractBlockBuilding):
 
     def __init__(self):
         super().__init__()
-        self.vector_size: int
         self.top_k: int
         self.encoded_data : BloomEncodedData
         self.neighbors : np.array
@@ -417,12 +417,15 @@ class FAISSBlocking(AbstractBlockBuilding):
     def build_blocks(self,
                     encoded_data: BloomEncodedData,
                     attributes : List[str] = None,
-                    vector_size: int = 300,
                     top_k: int = 30,
     ) -> Dict[Union[str, int], Block]:
-        self.vector_size = vector_size
         self.top_k = top_k
         return super().build_blocks(encoded_data, attributes)
+
+    # TODO
+    # d = 120
+    # index1 = faiss.IndexBinaryHNSW(d, 32)
+    # index1.metric_type = faiss.METRIC_Jaccard
 
     def _fit(self):
         enc_bitarray_dict : dict = self.encoded_data.bitarray_dict

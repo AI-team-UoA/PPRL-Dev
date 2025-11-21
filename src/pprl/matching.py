@@ -10,12 +10,13 @@ from networkx import Graph
 from ordered_set import OrderedSet
 from openfhe import CCParamsBGVRNS, SecurityLevel, \
     CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
-
+from tqdm.auto import tqdm
 import pandas as pd
 
 from src.pprl.utils import _dice, _scm
 import src.pprl.openfhe_similarity
-from src.pprl.datamodel import  Block, EncodedData, BloomEncodedData, HomomorphicEcnodedData
+from src.pprl.datamodel import  Block, EncodedData
+from src.pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
 from src.pprl.evaluation import Evaluation
 from src.pprl.datamodel import PPRLFeature
 
@@ -256,7 +257,7 @@ class Matcher(PPRLFeature):
         edges = [(idx_to_id[i], idx_to_id[j], float(sim))
                 for (i,j), sim in zip(batch_pairs, avg_similarities)
                 if sim >= self.matcher_config.threshold]
-        
+
         return edges
 
     def _predict_create_bloom_matrix(self, attributes: list,
@@ -291,7 +292,8 @@ class Matcher(PPRLFeature):
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
         graph = Graph()
-        for start in range(0, n_candidates, self.matcher_config.batch_size):
+        for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
+                    desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
             edges = self._predict_batches(idx_pairs[start:end],
                                 bloom_matrix, idx_to_id)

@@ -9,9 +9,10 @@ from abc import ABC, abstractmethod
 from typing import Dict
 import pandas as pd
 import numpy as np
-from tqdm import tqdm
+from tqdm.auto import tqdm
 from src.pprl.evaluation import Evaluation
-from src.pprl.datamodel import BloomEncodedData, PPRLFeature
+from src.pprl.datamodel import PPRLFeature
+from src.pprl.encoded_data import BloomEncodedData
 from src.pprl.utils import chi_square
 
 
@@ -46,7 +47,7 @@ class AbstractComparisonCleaning(PPRLFeature):
 
         self.candidate_pairs : Dict[int, set] = defaultdict(set)
 
-        for attr in tqdm(encoded_data.attributes, desc="Encoding attributes", position=0):
+        for attr in encoded_data.attributes:
             self._entity_index, self._inverted_index = encoded_data.to_entities(attr, adjacent_bits)
             self.candidate_pairs = self._apply_main_processing()
 

@@ -1,5 +1,6 @@
 from src.pprl.encoder import BloomFilter, BloomFilterConfig
-from src.pprl.datamodel import  Block, BloomEncodedData
+from src.pprl.datamodel import  Block
+from src.pprl.encoded_data import BloomEncodedData
 from typing import Dict
 import itertools
 import pandas as pd
@@ -25,8 +26,8 @@ if __name__ == '__main__':
     path = "data/test"
 
     d1 = pd.read_csv(f"{path}/test1.csv", sep =',')
-    config = BloomFilterConfig(size=128,
-        num_hashes=4,
+    config = BloomFilterConfig(size=8,
+        num_hashes=2,
         offset=0,qgrams=2,
         hashing_type='salted_qgrams',
         attributes = ["name", "email"])
@@ -45,9 +46,9 @@ if __name__ == '__main__':
 
     gt = pd.read_csv(f'{path}/gt.csv' , sep=',')
     new_bloom.set_ground_truth(gt)
-
+    new_bloom.evaluate()
     # new_enc_bitarray = new_bloom.bitarray_dict.copy()
-    print(new_bloom.bitarray_dict)
+    # print(new_bloom.bitarray_dict)
     faiss_blocking = FAISSBlocking()
     blocks = faiss_blocking.build_blocks(new_bloom, new_bloom.attributes, top_k=2)
     faiss_blocking.evaluate(blocks)

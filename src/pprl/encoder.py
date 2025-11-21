@@ -5,7 +5,8 @@ import re
 import hashlib
 import pandas as pd
 from metaphone import doublemetaphone
-from src.pprl.datamodel import BloomEncodedData
+from tqdm.auto import tqdm
+from src.pprl.encoded_data import BloomEncodedData
 
 @dataclass
 class BloomFilterConfig:
@@ -95,7 +96,7 @@ class BloomFilter:
 
     def _encode(self, df: pd.DataFrame) -> BloomEncodedData:
         bloom_dict = {}
-        for i, (_, row) in enumerate(df.iterrows()):
+        for i, (_, row) in tqdm(enumerate(df.iterrows()), desc='Encoding Data'):
             bloom_dict[i] = self._create_bloom_dict_for_row(row)
         return BloomEncodedData(data = bloom_dict, length=self.size + self.offset, )  #leng
 
