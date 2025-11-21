@@ -63,14 +63,14 @@ class BloomFilter:
 
 
     def hash(self, str_to_enc: str) -> List[int]:
-        """Return Bloom filter bit positions 
+        """Return Bloom filter bit positions
         for the given string using the selected hashing method.
-        
-        Args: 
+
+        Args:
             str_to_enc (str): String to encode
-        
-        Returns: 
-            List[int]: List of the positive bits 
+
+        Returns:
+            List[int]: List of the positive bits
         """
         encoder_dict = {
             "salted_string" : lambda: self._salted_string(str_to_enc),
@@ -99,7 +99,7 @@ class BloomFilter:
             bloom_dict[i] = self._create_bloom_dict_for_row(row)
         return BloomEncodedData(data = bloom_dict, length=self.size + self.offset, )  #leng
 
-    def _hash_token(self, bf: Set[int],  salted_token: str, hash_token : bool = True):
+    def _hash_token(self, bf: Set[int],  token: str, hash_token : bool = True):
         # HASH STRING or HASH QGRAM
 
         # HASH STRING here
@@ -108,23 +108,21 @@ class BloomFilter:
             bf = set(bf)
 
         if hash_token:
-            hashed = hashlib.sha256(salted_token).digest()
+            hashed = hashlib.sha256(token).digest()
             for i in range(self.num_hashes):
                 start_idx = i * 4 % (len(hashed) - 4)
                 segment = hashed[start_idx:start_idx + 4]
                 position = (int.from_bytes(segment, 'little') % self.size) + self.offset
                 bf.add(position)
         else:
-            for i in range(len(salted_token) - self.qgrams + 1):
-                qgram_token = salted_token[i:i+self.qgrams]
-                if len(qgram_token) < self.qgrams:
-                    qgram_token = qgram_token + '#'*(self.qgrams - len(qgram_token))
-
-                hashed = hashlib.sha256(qgram_token).digest()
+            for i in range(len(token) - self.qgrams + 1):
+                qgram_token = token[i:i+self.qgrams]
+                if qgram_token == '_':
+                    continue
                 for i in range(self.num_hashes):
-                    start_idx = i * 4 % (len(hashed) - 4)
-                    segment = hashed[start_idx:start_idx + 4]
-                    position = (int.from_bytes(segment, 'little') % self.size) + self.offset
+                    salted_token = f"{qgram_token}{i}{self.salt}".encode("utf-8")
+                    hashed = hashlib.sha256(salted_token).digest()
+                    position = (int.from_bytes(hashed, "little") % self.size) + self.offset
                     bf.add(position)
 
         return [*bf]
@@ -135,19 +133,18 @@ class BloomFilter:
 
         bf = set()
         for i in range(self.num_hashes):
-            salted_string = (self.salt + str(i) +  str_to_enc).encode("utf-8")
+            salted_string = (str_to_enc + str(i) +  self.salt).encode("utf-8")
             bf = self._hash_token(bf, salted_string, True)
 
         return [*bf]
 
     def _salted_qgrams(self, str_to_enc: str) -> List[int]:
         tokens : List[str] = self._tokenize(str_to_enc)
+        split = [f"_{word}_" for word in tokens if word]
         bf = set()
-        for token in tokens:
-            for i in range(self.num_hashes):
+        for token in split:
             # salted_string = (self.salt + str(i) +  str_to_enc).encode("utf-8")
-                salted_token : str = (self.salt + str(i) + token).encode("utf-8")
-                bf = self._hash_token(bf, salted_token, False)                   # HASH QGRAM
+            bf = self._hash_token(bf, token, False)                   # HASH QGRAM
 
         return [*bf]
 
@@ -161,13 +158,12 @@ class BloomFilter:
         bf = set()
 
         tokens = self._tokenize(str_to_enc)
-        for token in tokens:
-            for i in range(self.num_hashes):
-                salted_token: str = self.salt + str(i) +  token
-                skipped_tokens : List[str] = [salted_token[1::2], salted_token[::2]]
-                for skipped_token in skipped_tokens:
-                    utf_8_token = skipped_token.encode('utf-8')
-                    bf = self._hash_token(bf, utf_8_token, False)                   # HASH QGRAM
+        split = [f"_{word}_" for word in tokens if word]
+
+        for token in split:
+            skipped_tokens : List[str] = [token[1::2], token[::2]]
+            for skipped_token in skipped_tokens:
+                bf = self._hash_token(bf, skipped_token, False)                   # HASH QGRAM
 
         return [*bf]
 
@@ -200,9 +196,10 @@ class BloomFilter:
         """" Hashes tokens and extract from the hashed the qgrams """
         bf = set()
         tokens = self._tokenize(str_to_enc)
-        for token in tokens:
+        split = [f"_{word}_" for word in tokens if word]
+        for token in split:
             for i in range(self.num_hashes):
-                salted_token = (self.salt + str(i) + token).encode('utf-8')
+                salted_token = (token + str(i) +  self.salt).encode('utf-8')
                 bf = self._hash_token(bf, salted_token, True)
 
         return [*bf]

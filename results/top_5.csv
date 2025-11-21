@@ -1,0 +1,21 @@
+name,candidate_pairs,adjacent_bits,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config,top_k
+CardinalityEdgePruning,4502,4.0,19.3,81.67,31.23,869,3633,881,195,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 6, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+CardinalityEdgePruning,4395,4.0,19.73,81.48,31.76,867,3528,879,197,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 10, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+CardinalityEdgePruning,4529,4.0,19.12,81.39,30.97,866,3663,878,198,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 7, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+CardinalityEdgePruning,4595,4.0,18.85,81.39,30.61,866,3729,878,198,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 9, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+CardinalityEdgePruning,4451,4.0,19.34,80.92,31.22,861,3590,873,203,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 8, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+FAISS Blocking,10640,,9.61,96.05,17.46,1022,9618,1034,42,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 5, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",9.0
+FAISS Blocking,10640,,9.61,96.05,17.46,1022,9618,1034,42,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 6, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",9.0
+FAISS Blocking,10640,,9.61,96.05,17.46,1022,9618,1034,42,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 7, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",9.0
+FAISS Blocking,10640,,9.6,95.96,17.45,1021,9619,1033,43,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 3, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",9.0
+FAISS Blocking,10640,,9.6,95.96,17.45,1021,9619,1033,43,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 4, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",9.0
+WeightedEdgePruning,9204,12.0,8.82,76.32,15.82,812,8392,824,252,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 7, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+WeightedEdgePruning,9135,12.0,8.65,74.25,15.49,790,8345,802,274,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 9, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+WeightedEdgePruning,8608,12.0,9.12,73.78,16.23,785,7823,797,279,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 8, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+WeightedEdgePruning,10349,12.0,7.53,73.21,13.65,779,9570,791,285,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 10, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+WeightedEdgePruning,6055,12.0,12.49,71.05,21.24,756,5299,768,308,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 6, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}",
+WeightedNodePruning,10395,12.0,7.92,77.35,14.36,823,9572,835,241,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 7, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",
+WeightedNodePruning,10147,12.0,8.04,76.69,14.56,816,9331,828,248,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 7, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}",
+WeightedNodePruning,10276,12.0,7.88,76.13,14.29,810,9466,822,254,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 6, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}",
+WeightedNodePruning,10373,12.0,7.66,74.72,13.9,795,9578,807,269,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 9, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}",
+WeightedNodePruning,9775,12.0,8.11,74.53,14.63,793,8982,805,271,"{'attributes': ['name'], 'size': 512, 'offset': 0, 'num_hashes': 8, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}",

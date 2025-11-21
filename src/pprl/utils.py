@@ -1,9 +1,10 @@
+"""Utils methods for many classes"""
+import uuid
+from abc import ABC
 from typing import List, Tuple, Dict
 import numpy as np
-from src.pprl.datamodel import Block
-from abc import ABC
-import uuid
 from networkx import Graph
+from src.pprl.datamodel import Block
 
 def chi_square(in_array: np.array) -> float:
     """Chi Square Method
@@ -33,7 +34,7 @@ def get_blocks_cardinality(blocks: Dict[str, Block]) -> int:
     Returns:
         int: Cardinality.
     """
-    return sum([block.get_cardinality() for block in blocks.values()])
+    return sum(block.get_cardinality() for block in blocks.values())
 
 def are_matching(entity_index : Dict[int, set], id1, id2) -> bool:
     '''
@@ -58,25 +59,42 @@ def batch_pairs(iterable, batch_size: int = 1):
 
 
 # Dice coefficient: 2 * |A ∩ B| / (|A| + |B|)
-def _drop_single_entity_blocks(blocks : dict[Block]) -> dict: 
+def _drop_single_entity_blocks(blocks : dict[Block]) -> dict:
     return dict(filter(lambda e: not _block_with_one_entity(e[1]), blocks.items()))
 
-def _block_with_one_entity(block : Block) -> bool: 
-    return True if len(block.entities) == 1 else False
+def _block_with_one_entity(block : Block) -> bool:
+    return len(block.entities) == 1
 
-def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> float: 
+def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> float:
     return float(2 * (intersecntion) / (cadinality_a + cardinality_b))
 
 
 
 
-    
-def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array: 
+
+def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False) -> np.array:
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
-        
+
+    if concat_bf:
+        concatenated_1 = blooms_1.reshape(blooms_1.shape[0], -1)
+        concatenated_2 = blooms_2.reshape(blooms_2.shape[0], -1)
+        intersections = np.sum(concatenated_1 & concatenated_2, axis=1)  # (n_candidates, n_attributes)
+        card_1 = np.sum(concatenated_1, axis=1)  # (n_candidates, n_attributes)
+        card_2 = np.sum(concatenated_2, axis=1)  # (n_candidates, n_attributes)
+
+        denominators = card_1 + card_2
+        # Avoid division by zero
+        dice_scores = np.zeros_like(intersections, dtype=np.float64)
+        valid_mask = denominators > 0
+        return  (2 * intersections[valid_mask]) / denominators[valid_mask]
+
+
+
+
+
     intersections = np.sum(blooms_1 & blooms_2, axis=2)  # (n_candidates, n_attributes)
-        
+
     # Cardinalities
     card_1 = np.sum(blooms_1, axis=2)  # (n_candidates, n_attributes)
     card_2 = np.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
@@ -92,19 +110,18 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
     return avg_similarities
 
 
-def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array: 
+def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
 
 
     xor_sum = np.bitwise_xor(blooms_1, blooms_2).sum(axis=2)
     matches = blooms_1.shape[2] - xor_sum
-    
-    
+
+
     scm_per_attr = matches / blooms_1.shape[2]
-    
+
     avg_similarities = np.mean(scm_per_attr, axis=1)
-    print(avg_similarities)
 
 
     return avg_similarities
@@ -113,16 +130,18 @@ def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
 
 class PredictionData(ABC):
     """Auxiliarry module used to store basic information about the to-emit, predicted pairs
-       It is used to retrieve that data efficiently during the evaluation phase, and subsequent storage of emission data (e.x. total emissions)
+       It is used to retrieve that data efficiently during the evaluation phase,
+        and subsequent storage of emission data (e.x. total emissions)
 
     Args:
         ABC (ABC): ABC Module
+
     """
     def __init__(self, matcher, matcher_info : dict) -> None:
         self.set_matcher_info(matcher_info)
         self.set_duplicate_emitted(matcher.duplicate_emitted)
         self.set_candidate_pairs(self._format_predictions(matcher.pairs))
-    
+
     def _format_predictions(self, predictions) -> List[Tuple[int, int]]:
         """Transforms given predictions into a list of duplets (candidate pairs)
            Currently Graph and Default input is supported
@@ -133,70 +152,103 @@ class PredictionData(ABC):
         Returns:
             List[Tuple[int, int]]: Formatted Predictions
         """
-        return [edge[:3] for edge in predictions.edges] if isinstance(predictions, Graph) else predictions
-        
+        return [edge[:3] for edge in predictions.edges] if isinstance(predictions, Graph) \
+            else predictions
+
     def get_name(self) -> str:
+        """Get name"""
         _matcher_info : dict = self.get_matcher_info()
-        if('name' not in _matcher_info): raise ValueError("Matcher doesn't have a name - Make sure its execution data has been calculated")
+        if 'name' not in _matcher_info:
+            raise ValueError("Matcher doesn't have a name \
+            - Make sure its execution data has been calculated")
         return _matcher_info['name']
-    
+
     def get_candidate_pairs(self) -> List[Tuple[float, int, int]]:
-        if(self._candidate_pairs is None): raise ValueError("Pairs not scheduled yet - Cannot retrieve candidate pairs")
+        """Get candidate pairs"""
+        if self._candidate_pairs is None:
+            raise ValueError("Pairs not scheduled yet \
+            - Cannot retrieve candidate pairs")
         return self._candidate_pairs
-    
+
     def get_duplicate_emitted(self) -> dict:
-        if(self._duplicate_emitted is None): raise ValueError("No information about the status of true positives' emission")
+        """Get duplicate emmited"""
+        if self._duplicate_emitted is None:
+            raise ValueError("No information about the status of true positives' emission")
         return self._duplicate_emitted
-    
+
     def get_total_emissions(self) -> int:
+        """Get total emmissions"""
         _matcher_info : dict = self.get_matcher_info()
-        if('total_emissions' not in _matcher_info): raise ValueError("Pairs not emitted yet - Total Emissions are undefined")
+        if 'total_emissions' not in _matcher_info:
+            raise ValueError("Pairs not emitted yet - Total Emissions are undefined")
         return _matcher_info['total_emissions']
-    
+
     def get_normalized_auc(self) -> float:
+        """Get normalized auc"""
+
         _matcher_info : dict = self.get_matcher_info()
-        if('auc' not in _matcher_info): raise ValueError("Pairs not emitted yet - Normalized AUC is undefined")
+        if 'auc' not in _matcher_info:
+            raise ValueError("Pairs not emitted yet - Normalized AUC is undefined")
         return _matcher_info['auc']
-    
+
     def get_cumulative_recall(self) -> float:
+        """Get cumulative_recall"""
+
         _matcher_info : dict = self.get_matcher_info()
-        if('recall' not in _matcher_info): raise ValueError("Pairs not emitted yet - Cumulative Recall is undefined")
+        if 'recall' not in _matcher_info:
+            raise ValueError("Pairs not emitted yet - Cumulative Recall is undefined")
         return _matcher_info['recall']
-    
+
     def get_matcher_info(self) -> dict:
-        if(self._matcher_info is None): raise ValueError("Pairs not emitted yet - Matcher Info is undefined")
+        """Get matcher info"""
+        if self._matcher_info is None:
+            raise ValueError("Pairs not emitted yet - Matcher Info is undefined")
         return self._matcher_info
-    
+
     def set_matcher_info(self, matcher_info : dict) -> None:
+        """Set matcher info"""
         self._matcher_info : dict = matcher_info
-    
+
     def set_name(self, name : str):
+        """Set name"""
+
         _matcher_info : dict = self.get_matcher_info()
-        _matcher_info['name'] = name  
-    
+        _matcher_info['name'] = name
+
     def set_candidate_pairs(self, candidate_pairs : List[Tuple[float, int, int]]) -> None:
+        """Set candidate pairs"""
+
         self._candidate_pairs : List[Tuple[float, int, int]] = candidate_pairs
-    
+
     def set_duplicate_emitted(self, duplicate_emitted : dict) -> None:
+        """Set duplicate emmitted"""
+
         self._duplicate_emitted : dict = duplicate_emitted
-    
+
     def set_total_emissions(self, total_emissions : int) -> None:
+        """Set total emissions"""
+
         _matcher_info : dict = self.get_matcher_info()
         _matcher_info['total_emissions'] = total_emissions
-        
+
     def set_normalized_auc(self, normalized_auc : float) -> None:
+        """Set noramlized auc"""
+
         _matcher_info : dict = self.get_matcher_info()
         _matcher_info['auc'] = normalized_auc
-        
+
     def set_cumulative_recall(self, cumulative_recall : float) -> None:
+        """Set cumulative recall"""
+
         _matcher_info : dict = self.get_matcher_info()
-        _matcher_info['recall'] = cumulative_recall        
-        
+        _matcher_info['recall'] = cumulative_recall
+
 
 def generate_unique_identifier() -> str:
-    """Returns unique identifier which is used to cross reference workflows stored in json file and their performance graphs
+    """Returns unique identifier which is used
+    to cross reference workflows stored in json file and their performance graphs
 
     Returns:
         str: Unique identifier
     """
-    return str(uuid.uuid4())  
+    return str(uuid.uuid4())

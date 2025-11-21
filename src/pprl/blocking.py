@@ -390,12 +390,19 @@ class FAISSBlocking(AbstractBlockBuilding):
             upper_bound = self.encoded_data.bounds[i]
             bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in bitarray_dict.items()
                         if lower_bound <= k < upper_bound}
-            bitarray_list: List[bitarray] = [
-                reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
-            ]
+
+
+            bitarray_list: List[bitarray] = []
+
+            for bitarrays in bitarray_dict.values():
+                conc_bit = None
+                for bit_arr in bitarrays.values():
+                    conc_bit = bit_arr if not conc_bit else conc_bit + bit_arr
+                bitarray_list.append(conc_bit)
 
             vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
-                        for b in bitarray_list], dtype=np.uint8)
+                for b in bitarray_list], dtype=np.uint8)
+
 
             self.distances, self.neighbors = self.index.search(vector, self.top_k)
             for _entity in range(0, self.neighbors.shape[0]):
@@ -421,14 +428,19 @@ class FAISSBlocking(AbstractBlockBuilding):
         enc_bitarray_dict : dict = self.encoded_data.bitarray_dict
         bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in enc_bitarray_dict.items()
                         if 0 <= k < self.encoded_data.bounds[0]}
-        bitarray_list: List[bitarray] = [
-            reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
-        ]
+        bitarray_list: List[bitarray] = []
+
+        for bitarrays in bitarray_dict.values():
+            conc_bit = None
+            for bit_arr in bitarrays.values():
+                conc_bit = bit_arr if not conc_bit else conc_bit + bit_arr
+            bitarray_list.append(conc_bit)
 
         vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
             for b in bitarray_list], dtype=np.uint8)
 
-        self.index : faiss.IndexBinaryFlat = faiss.IndexBinaryFlat(self.encoded_data.length)
+
+        self.index : faiss.IndexBinaryFlat = faiss.IndexBinaryFlat(len(bitarray_list[0]))
         self.index.add(vector)
 
     def _clean_blocks(self, blocks):
@@ -466,8 +478,7 @@ class FAISSBlocking(AbstractBlockBuilding):
 
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
             id2 = self.encoded_data.bounds[0] + id2
-            if (id1 in prediction and id2 in prediction[id1]) or   \
-                (id2 in prediction and id1 in prediction[id2]):
+            if id1 in prediction and id2 in prediction[id1]:
                 true_positives += 1
 
         eval_obj.calculate_scores(true_positives=true_positives,

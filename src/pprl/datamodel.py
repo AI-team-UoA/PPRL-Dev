@@ -244,7 +244,8 @@ class BloomEncodedData(EncodedData):
         self.ground_truth = df
         self.skip_ground_truth = False
 
-    def to_entities(self, attribute: str = None) -> Tuple[dict, dict]:
+    def to_entities(self, attribute: str = None,
+            adjacent_bits: int = 1) -> Tuple[dict, dict]:
         """
         Convert to entity-bit mapping and create inverted index.
 
@@ -261,11 +262,21 @@ class BloomEncodedData(EncodedData):
             for idx, blooms in self.encoded_dict.items():
                 if dataset < len(self.bounds) and idx >= self.bounds[dataset]:
                     dataset += 1
-                to_entities[idx] = blooms[attribute]
-                for bit in blooms[attribute]:
-                    if bit not in inverted_index:
-                        inverted_index[bit] = {key: set() for key in range(len(self.bounds))}
-                    inverted_index[bit][dataset].add(idx)
+
+                key_set = set()
+                adjacent_list = [i for i in range(adjacent_bits)]
+                for index in range((self.length + adjacent_bits - 1) //  adjacent_bits):
+                    adj_list = [(i + index * adjacent_bits) for i in adjacent_list]
+                    bit_key = f'{index}'
+                    for i in adj_list:
+                        if i in blooms[attribute]:
+                            bit_key = f'{bit_key},{i}'
+                    key_set.add(bit_key)
+                    if bit_key not in inverted_index:
+                        inverted_index[bit_key] = {key: set() for key in range(len(self.bounds))}
+                    inverted_index[bit_key][dataset].add(idx)
+
+                to_entities[idx] = [*key_set]
         else:
             for idx, blooms in self.encoded_dict.items():
                 if  dataset < len(self.bounds) and idx >= self.bounds[dataset]:

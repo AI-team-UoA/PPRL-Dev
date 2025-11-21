@@ -31,6 +31,7 @@ class AbstractComparisonCleaning(PPRLFeature):
     def process(
             self,
             encoded_data: BloomEncodedData,
+            adjacent_bits : int = 1
     ) -> dict:
         """Main method for comparison cleaning
 
@@ -46,7 +47,7 @@ class AbstractComparisonCleaning(PPRLFeature):
         self.candidate_pairs : Dict[int, set] = defaultdict(set)
 
         for attr in tqdm(encoded_data.attributes, desc="Encoding attributes", position=0):
-            self._entity_index, self._inverted_index = encoded_data.to_entities(attr)
+            self._entity_index, self._inverted_index = encoded_data.to_entities(attr, adjacent_bits)
             self.candidate_pairs = self._apply_main_processing()
 
         self.execution_time = time() - start_time
@@ -106,8 +107,7 @@ class AbstractComparisonCleaning(PPRLFeature):
 
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
             id2 = self.encoded_data.bounds[0] + id2
-            if (id1 in prediction and id2 in prediction[id1]) or   \
-                (id2 in prediction and id1 in prediction[id2]):
+            if id1 in prediction and id2 in prediction[id1]:
                 true_positives += 1
 
         eval_obj.calculate_scores(true_positives=true_positives,
@@ -297,8 +297,8 @@ class WeightedEdgePruning(AbstractMetablocking):
 
     def _prune_edges(self) -> dict:
         _limit = self.encoded_data.bounds[0] if not self._node_centric \
-            else len(self.encoded_data.encoded_dict) 
-        for i in tqdm(range(0, _limit), desc=f"Processing entities", position=1, leave=False):
+            else len(self.encoded_data.encoded_dict)
+        for i in tqdm(range(0, _limit), desc="Processing entities", position=1, leave=False):
             self._process_entity(i)
             self._verify_valid_entities(i)
 
@@ -386,7 +386,7 @@ class CardinalityEdgePruning(WeightedEdgePruning):
     def _prune_edges(self) -> dict:
         _limit = self.encoded_data.bounds[0] if not self._node_centric \
             else len(self.encoded_data.encoded_dict)
-        
+
         self._top_k_edges = PriorityQueue(int(2*self._threshold))
         for i in range(0, _limit):
             self._process_entity(i)
@@ -434,7 +434,7 @@ class CardinalityNodePruning(CardinalityEdgePruning):
     def _prune_edges(self) -> dict:
         _limit = self.encoded_data.bounds[0] if not self._node_centric \
             else len(self.encoded_data.encoded_dict)
-        
+
         self._nearest_entities = {}
         for i in range(0, _limit):
             self._process_entity(i)
@@ -535,7 +535,7 @@ class WeightedNodePruning(WeightedEdgePruning):
     def _set_threshold(self):
         _limit = self.encoded_data.bounds[0] if not self._node_centric \
             else len(self.encoded_data.encoded_dict)
-        
+
         self._average_weight = np.zeros(_limit, dtype=float)
         for i in range(0, _limit):
             self._process_entity(i)

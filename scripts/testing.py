@@ -11,8 +11,9 @@ import bitarray
 from networkx import Graph
 from src.pprl.matching import Matcher
 from collections import defaultdict
-from src.pprl.comparison_cleaning import WeightedNodePruning, CardinalityNodePruning
-
+from src.pprl.comparison_cleaning import WeightedEdgePruning, CardinalityNodePruning
+from pybloom_live import BloomFilter as Bloom
+import hashlib
 
 # # Helper to generate random strings
 # def random_string(length=10):
@@ -24,19 +25,20 @@ if __name__ == '__main__':
     path = "data/test"
 
     d1 = pd.read_csv(f"{path}/test1.csv", sep =',')
-    config = BloomFilterConfig(size=2048,
-        num_hashes=20,
-        offset=0,qgrams=4,
-        hashing_type='salted_string')
-    
+    config = BloomFilterConfig(size=128,
+        num_hashes=4,
+        offset=0,qgrams=2,
+        hashing_type='salted_qgrams',
+        attributes = ["name", "email"])
+
     bl = BloomFilter(config)
 
     bloom_filters : BloomEncodedData = bl.encode(d1)
     bloom_filters.to_file('bloom_1.pkl')
-    bloom_filters.to_file('bloom_2.pkl')
 
     d2 = pd.read_csv(f"{path}/test2.csv", sep=',')
     bloom_filters : BloomEncodedData = bl.encode(d2)
+    bloom_filters.to_file('bloom_2.pkl')
 
     new_bloom = BloomEncodedData.from_file('bloom_1.pkl', 'bloom_2.pkl')
 
@@ -44,22 +46,25 @@ if __name__ == '__main__':
     gt = pd.read_csv(f'{path}/gt.csv' , sep=',')
     new_bloom.set_ground_truth(gt)
 
-
+    # new_enc_bitarray = new_bloom.bitarray_dict.copy()
+    print(new_bloom.bitarray_dict)
     faiss_blocking = FAISSBlocking()
-    blocks = faiss_blocking.build_blocks(new_bloom, new_bloom.attributes, top_k=1)
+    blocks = faiss_blocking.build_blocks(new_bloom, new_bloom.attributes, top_k=2)
+    faiss_blocking.evaluate(blocks)
 
-    print(blocks)
-
-    wep = WeightedNodePruning()
-    new_candidates = wep.process(encoded_data=new_bloom)
-
-    print(new_candidates)
-    matcher = Matcher(batch_size=1, threshold=1.0, metric='dice')
-    graph : Graph = matcher.predict(encoded_data=new_bloom, blocks=new_candidates)
+    matcher = Matcher(batch_size=1, threshold=0.7, metric='dice', concat_bf=False)
+    graph : Graph = matcher.predict(encoded_data=new_bloom, blocks=blocks)
     ev = matcher.evaluate(graph)
 
 
+    print(graph.edges)
+    
+    exit(10)
+
+    wep = WeightedEdgePruning()
+    new_candidates = wep.process(encoded_data=new_bloom, adjacent_bits=8)
     print(new_candidates)
+
     exit(10)
 
 
