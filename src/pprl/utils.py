@@ -4,7 +4,7 @@ from abc import ABC
 from typing import List, Tuple, Dict
 import numpy as np
 from networkx import Graph
-from src.pprl.datamodel import Block
+from pprl.datamodel import Block
 
 def chi_square(in_array: np.array) -> float:
     """Chi Square Method

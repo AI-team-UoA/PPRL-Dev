@@ -4,15 +4,13 @@ from collections import defaultdict
 from typing import List, Dict, Union
 import time
 from abc import abstractmethod
-from functools import reduce
-import operator
+
 import faiss
 from bitarray import bitarray
 import numpy as np
-from src.pprl.utils import _drop_single_entity_blocks, are_matching, get_blocks_cardinality
-from src.pprl.datamodel import  Block, PPRLFeature, EncodedData
-from src.pprl.encoded_data import BloomEncodedData
-from src.pprl.evaluation import Evaluation
+from pprl.datamodel import  Block, PPRLFeature, EncodedData
+from pprl.encoded_data import BloomEncodedData
+from pprl.evaluation import Evaluation
 
 
 class AbstractBlockProcessing(PPRLFeature):
@@ -23,11 +21,13 @@ class AbstractBlockProcessing(PPRLFeature):
         super().__init__()
         self.blocks : dict
         self.attributes : list
-        self.encoded_data : EncodedData
+        self.encoded_data : EncodedData = None
 
     def report(self) -> None:
         """Prints Block Building method configuration
         """
+        if not self.encoded_data:
+            raise AttributeError("Encoded data must be instantiated")
         _configuration = self._configuration()
         print(
             "Method name: " + self._method_name +
@@ -38,15 +38,7 @@ class AbstractBlockProcessing(PPRLFeature):
             f"\nRuntime: {self.execution_time:2.4f} seconds"
         )
 
-    def _serial_evaluate(self, entity_index: dict):
-        true_positives = 0
-        for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
-            id2 = id2 + self.encoded_data.bounds[0]
-            if id1 in entity_index and    \
-            id2 in entity_index and are_matching(entity_index, id1, id2):
-                true_positives += 1
 
-        return true_positives
 
     def evaluate(self,
             prediction,
@@ -79,10 +71,26 @@ class AbstractBlockProcessing(PPRLFeature):
                     "Data object has not been initialized with the ground-truth file")
 
         eval_obj = Evaluation(self.encoded_data)
-        entity_index = eval_obj.create_entity_index_from_blocks(eval_blocks)
-        true_positives = self._serial_evaluate(entity_index)
 
-        total_matching_pairs = get_blocks_cardinality(eval_blocks)
+        ground_truth_list = list(self.encoded_data.
+                        ground_truth.itertuples(index=False, name=None))
+        
+
+        candidate_pairs = {
+            (id1, id2)
+            for block in eval_blocks.values()
+            for id1 in block[0]
+            for id2 in block[1]
+        }
+
+
+        total_matching_pairs = len(candidate_pairs)
+        offset = self.encoded_data.bounds[1]
+        true_positives = sum(
+            1 for id1, id2 in candidate_pairs
+            if (id1, id2-offset) in ground_truth_list
+        )
+
         eval_obj.calculate_scores(true_positives=true_positives,
                                 total_matching_pairs=total_matching_pairs)
         eval_result = eval_obj.report(self.method_configuration(),
@@ -107,19 +115,22 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
     def __init__(self, seed : int = 42):
         super().__init__()
         self.seed : int = seed
-        self._create_blocks_function : callable = None
         self.original_num_of_blocks : int
 
-    def _create_blocks(self) -> Dict[str, Block]:
-        blocks : Dict[str, Block] = defaultdict(Block)
+    def _create_blocks(self) -> Dict[str, Dict[int, set]]:
+        blocks : Dict[str, Dict[int, set]] = {}
         dataset = 0
         for idx, bloom_filters in self.encoded_data.bitarray_dict.items():
             if idx >= self.encoded_data.bounds[dataset]:
                 dataset += 1
+            concatenated_bitarray = sum(
+                (array for attr, array in bloom_filters.items()
+                if attr in self.attributes), bitarray())
 
-            for bit_array in bloom_filters.values():
-                for key in self._block_record(bit_array):
-                    blocks[str(key)].entities[f'D{dataset}'].add(idx)
+            for key in self._block_record(concatenated_bitarray):
+                blocks.setdefault(str(key), {})
+                blocks[str(key)].setdefault(dataset, set())
+                blocks[str(key)][dataset].add(idx)
         return blocks
 
 
@@ -140,7 +151,7 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
                 Dict[token, Block]: Dictionary of blocks.
         """
         _start_time = time.time()
-        self.encoded_data = encoded_data
+        self.encoded_data : BloomEncodedData = encoded_data
         bloom_attributes = encoded_data.attributes
 
         if attributes:
@@ -153,7 +164,7 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
 
         self._fit()
 
-        blocks : Dict[str, Block] = self._create_blocks()
+        blocks : Dict[str, Dict[int, set]] = self._create_blocks()
         self.original_num_of_blocks = len(blocks)
         self.blocks = blocks
         self.blocks = self._clean_blocks(blocks)
@@ -161,8 +172,14 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
 
         return self.blocks
 
-    def _clean_blocks(self, blocks):
-        return _drop_single_entity_blocks(blocks)
+    def _clean_blocks(self, blocks: dict):
+        cleaned_blocks = {}
+        for key, block in blocks.items():
+            if 0 not in block or 1 not in block:
+                continue
+            cleaned_blocks[key] = block
+
+        return cleaned_blocks
 
     def report(self) -> None:
         """Prints Block Building method configuration
@@ -207,6 +224,9 @@ class LSHBlocker(AbstractBlockBuilding):
             frequency distribution.
         seed (int): Random seed for reproducibility.
     """
+    _method_name = "LSHBlocker"
+    _method_info = "LSHBlocker"
+    _method_short_name = "LSHBlocker"
 
     def __init__(
         self,
@@ -265,13 +285,17 @@ class LSHBlocker(AbstractBlockBuilding):
             raise ValueError("Not enough bit positions after pruning")
         return candidates
 
+
+    # Change fit to work with concatenated bloom_filters
     def _fit(self):
         """Initialize blocker by sampling to prune and selecting usable bit positions."""
         bitarray_dict : Dict[int, Dict[str, bitarray]] = self.encoded_data.bitarray_dict
+
         bitarray_list: List[bitarray] = [
-            reduce(operator.or_, bitarrays.values()) for bitarrays in bitarray_dict.values()
-            # for bitarray in bitarrays.values()
+            sum((array for attr, array in attr_bittarays.items()
+                if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
         ]
+        print(bitarray_list)
         self._rng = random.Random(self.seed)
         self._bit_positions = self._select_bit_positions(bitarray_list)
 
@@ -307,6 +331,13 @@ class BitBlocker(AbstractBlockBuilding):
     seed : int, default=42
         Random seed for reproducibility.
     """
+
+    _method_name = "BitBlocker"
+    _method_info = "BitBlocker"
+    _method_short_name = "BitBlocker"
+
+
+
     def __init__(self,
             psi: int = 36,
             lmbda: int = 3,
@@ -327,14 +358,15 @@ class BitBlocker(AbstractBlockBuilding):
         self.psi = psi
         self.lmbda = lmbda
         self.hash_len : int
-        self._create_blocks_function = self._create_blocks
         self.encoded_data : BloomEncodedData
         self.rng : random.Random
         self.hash_indices : tuple
 
     def _fit(self) -> None:
+        if self.encoded_data.length % 4 != 0 :
+            raise ValueError("Bloom Filters' length must multiple of 8.")
 
-        self.hash_len = self.encoded_data.length
+        self.hash_len = self.encoded_data.length * len(self.attributes)
         self.rng = random.Random(self.seed)
         self.hash_indices = tuple(self.rng.sample(range(self.hash_len), self.psi)
                                   for _ in range(self.lmbda))
@@ -383,35 +415,29 @@ class FAISSBlocking(AbstractBlockBuilding):
 
     def _create_blocks(self):
         blocks : Dict[int, set] = defaultdict(set)
-        dataset = len(self.encoded_data.bounds)
         bitarray_dict : dict = self.encoded_data.bitarray_dict
-        for i in range(1, dataset):
-            lower_bound = self.encoded_data.bounds[i-1]
-            upper_bound = self.encoded_data.bounds[i]
-            bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in bitarray_dict.items()
-                        if lower_bound <= k < upper_bound}
+        lower_bound = self.encoded_data.bounds[1]
+        bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in bitarray_dict.items()
+                    if lower_bound <= k }
+
+        print(bitarray_dict)
+
+        bitarray_list: List[bitarray] = [
+            sum((array for attr, array in attr_bittarays.items()
+                if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
+        ]
+        vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
+            for b in bitarray_list], dtype=np.uint8)
 
 
-            bitarray_list: List[bitarray] = []
-
-            for bitarrays in bitarray_dict.values():
-                conc_bit = None
-                for bit_arr in bitarrays.values():
-                    conc_bit = bit_arr if not conc_bit else conc_bit + bit_arr
-                bitarray_list.append(conc_bit)
-
-            vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
-                for b in bitarray_list], dtype=np.uint8)
-
-
-            self.distances, self.neighbors = self.index.search(vector, self.top_k)
-            for _entity in range(0, self.neighbors.shape[0]):
-                _entity_id = _entity + lower_bound
-                for _neighbor_id in self.neighbors[_entity]:
-                    if _neighbor_id < 0:
-                        break
-                    blocks[int(_neighbor_id)].add(_entity_id)
-
+        self.distances, self.neighbors = self.index.search(vector, self.top_k)
+        for _entity in range(0, self.neighbors.shape[0]):
+            _entity_id = _entity + lower_bound
+            for _neighbor_id in self.neighbors[_entity]:
+                if _neighbor_id < 0:
+                    break
+                blocks[int(_neighbor_id)].add(_entity_id)
+        print(blocks)
         return blocks
 
     def build_blocks(self,
@@ -420,6 +446,7 @@ class FAISSBlocking(AbstractBlockBuilding):
                     top_k: int = 30,
     ) -> Dict[Union[str, int], Block]:
         self.top_k = top_k
+
         return super().build_blocks(encoded_data, attributes)
 
     # TODO
@@ -430,14 +457,18 @@ class FAISSBlocking(AbstractBlockBuilding):
     def _fit(self):
         enc_bitarray_dict : dict = self.encoded_data.bitarray_dict
         bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in enc_bitarray_dict.items()
-                        if 0 <= k < self.encoded_data.bounds[0]}
-        bitarray_list: List[bitarray] = []
+                        if 0 <= k < self.encoded_data.bounds[1]}
+        bitarray_list: List[bitarray] = [
+            sum((array for attr, array in attr_bittarays.items()
+                if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
+        ]
 
-        for bitarrays in bitarray_dict.values():
-            conc_bit = None
-            for bit_arr in bitarrays.values():
-                conc_bit = bit_arr if not conc_bit else conc_bit + bit_arr
-            bitarray_list.append(conc_bit)
+
+        # for bitarrays in bitarray_dict.values():
+        #     conc_bit = None
+        #     for bit_arr in bitarrays.values():
+        #         conc_bit = bit_arr if not conc_bit else conc_bit + bit_arr
+        #     bitarray_list.append(conc_bit)
 
         vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
             for b in bitarray_list], dtype=np.uint8)
@@ -447,6 +478,10 @@ class FAISSBlocking(AbstractBlockBuilding):
         self.index.add(vector)
 
     def _clean_blocks(self, blocks):
+        new_blocks = {}
+        for key, block in blocks.items():
+            if len(block) != 0:
+                new_blocks[key] = block
         return blocks
 
     def evaluate(self,
@@ -480,7 +515,7 @@ class FAISSBlocking(AbstractBlockBuilding):
             total_matching_pairs += len(block)
 
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
-            id2 = self.encoded_data.bounds[0] + id2
+            id2 = self.encoded_data.bounds[1] + id2
             if id1 in prediction and id2 in prediction[id1]:
                 true_positives += 1
 

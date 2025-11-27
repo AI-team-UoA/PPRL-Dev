@@ -2,22 +2,28 @@
 
 import pickle
 from typing import Dict, List, Tuple
+from collections import defaultdict
+import itertools
+import logging
+
 import pandas as pd
+import ray
 from bitarray import bitarray
+from pprl.utils import  are_matching
+from pprl.evaluation import Evaluation
+from pprl.datamodel import EncodedData, PPRLFeature
 
-import pandas as pd
-from src.pprl.utils import  are_matching, get_blocks_cardinality
-from src.pprl.evaluation import Evaluation
-from src.pprl.datamodel import EncodedData
-
-
-class BloomEncodedData(EncodedData):
+class BloomEncodedData(EncodedData, PPRLFeature):
     """
     Encoded data using Bloom filters for PPRL.
 
     Stores entity data encoded as Bloom filters with inverted index support
     for efficient similarity computation.
     """
+
+    _method_name = "BloomEncodedData"
+    _method_info = "BloomEncodedData"
+    _method_short_name = "BED"
 
     dataset_limit : int
     bounds : List[int]
@@ -26,7 +32,8 @@ class BloomEncodedData(EncodedData):
 
     def __init__(self, data: Dict[int, Dict[str, List[int]]] = None, length: int = 0):
         """Initialize BloomEncodedData with optional pre-encoded data and bit length."""
-
+        super().__init__()
+        self.execution_time  = 0.0
         self.inverted_index = None
         self.skip_ground_truth = True
         if data:
@@ -116,7 +123,9 @@ class BloomEncodedData(EncodedData):
                 for i in adj_list:
                     if i in concatenated_bloom:
                         bit_key = f'{bit_key},{i}'
-                key_set.add(bit_key)
+                if adjacent_bits != 1 or \
+                    bit_key != f'{index}':
+                    key_set.add(bit_key)
                 if bit_key not in inverted_index:
                     inverted_index[bit_key] = {key: set() for key in range(len(self.bounds))}
                 inverted_index[bit_key][dataset].add(idx)
@@ -176,8 +185,57 @@ class BloomEncodedData(EncodedData):
 
         return true_positives
 
+    def calculate_candidate_pairs(self, inverted_index: dict) -> int:
+        """Returns length of candidate pairs"""
+        candidate_pairs  = set()
+        for block in inverted_index.values():
+            candidate_pairs.update(set(
+                itertools.product(block[0], block[1])))
+        return len(candidate_pairs)
+
+    @staticmethod
+    @ray.remote
+    def _ray_calculate_confusion_matrix(index : int,
+        encoded_dict: Dict[any, dict],
+        start: int,
+        end: int,
+        ground_truth: list,
+        adjacent_bits: int,
+        length: int):
+
+        total_matching_pairs = 0
+        true_positives = 0
+
+        adjacent_list = list(range(adjacent_bits))
+
+
+        # lathos gia > 1 attributes den yparxei offset name [0,1] email [1,2]
+        # ara to set_a periexei to [0,1,2]
+        set_a = set()
+        for lista in encoded_dict[index].values():
+            set_a.update(set(lista))
+        for j in range(start, end):
+            set_b = set()
+            for lista in encoded_dict[j].values():
+                set_b.update(set(lista))
+            for bit in range((length + adjacent_bits - 1) //  adjacent_bits):
+                adj_list = [(i + bit * adjacent_bits) for i in adjacent_list]
+                cont_a = [i for i in adj_list if i in set_a]
+                cont_b = [i for i in adj_list if i in set_b]
+                if len(cont_b) == 0 or len(cont_a) == 0:
+                    continue
+                if cont_a == cont_b:
+                    total_matching_pairs += 1
+                    if (index,j-start) in ground_truth:
+                        true_positives += 1
+                    break
+        return total_matching_pairs, true_positives
+
+
+
 
     def evaluate(self,
+            adjacent_bits: int = 1,
             export_to_df: bool = False,
             with_classification_report: bool = False,
             verbose: bool = True) -> any:
@@ -198,34 +256,45 @@ class BloomEncodedData(EncodedData):
 
         eval_obj = Evaluation(self)
 
-        entity_index, inverted_index = self.to_entities()
+        ground_truth_list = list(self.ground_truth.itertuples(index=False, name=None))
+        total_matching_pairs = 0
+        true_positives = 0
 
-        new_dict = {}
+        if not ray.is_initialized():
+            logging.getLogger("ray").setLevel(logging.ERROR)
+            ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
-        for key, value in entity_index.items():
-            new_dict[key] = set(value)
 
-        entity_index = new_dict
-        print(entity_index[0])
+        encoded_dict_ref = ray.put(self.encoded_dict)
+        gtruth_ref = ray.put(ground_truth_list)
+        futures = []
 
-        total_matching_pairs = sum(len(entities[0]) * len(entities[1])
-                    for entities in inverted_index.values())
-        print(total_matching_pairs)
-        exit(10)
+        for i in range(self.bounds[0]):
+            future = self._ray_calculate_confusion_matrix.remote(
+                index=i, encoded_dict = encoded_dict_ref,
+                start = self.bounds[0], end = self.bounds[1],
+                ground_truth = gtruth_ref, adjacent_bits = adjacent_bits,
+                length = self.length
+            )
+            futures.append(future)
 
-        true_positives = self._serial_evaluate(entity_index)
-        total_matching_pairs = get_blocks_cardinality(eval_blocks)
+        results = ray.get(futures)
+        for total, posititves in results:
+            total_matching_pairs += total
+            true_positives += posititves
 
-        # eval_obj.calculate_scores(true_positives=true_positives,
-        #                         total_matching_pairs=total_matching_pairs)
-        # eval_result = eval_obj.report(self.method_configuration(),
-        #                         export_to_df,
-        #                         with_classification_report,
-        #                         verbose)
+
+        eval_obj.calculate_scores(true_positives=true_positives,
+                                total_matching_pairs=total_matching_pairs)
+        eval_result = eval_obj.report(self.method_configuration(),
+                                export_to_df,
+                                with_classification_report,
+                                verbose)
 
         return eval_result
 
-
+    def _configuration(self):
+        return {}
 
 
 class HomomorphicEcnodedData(EncodedData):

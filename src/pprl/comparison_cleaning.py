@@ -10,10 +10,10 @@ from typing import Dict
 import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
-from src.pprl.evaluation import Evaluation
-from src.pprl.datamodel import PPRLFeature
-from src.pprl.encoded_data import BloomEncodedData
-from src.pprl.utils import chi_square
+from pprl.evaluation import Evaluation
+from pprl.datamodel import PPRLFeature
+from pprl.encoded_data import BloomEncodedData
+from pprl.utils import chi_square
 
 
 

@@ -1,18 +1,18 @@
-from src.pprl.encoder import BloomFilter, BloomFilterConfig
-from src.pprl.datamodel import  Block
-from src.pprl.encoded_data import BloomEncodedData
+from pprl.encoder import BloomFilter, BloomFilterConfig
+from pprl.datamodel import  Block
+from pprl.encoded_data import BloomEncodedData
 from typing import Dict
 import itertools
 import pandas as pd
-from src.pprl.blocking import LSHBlocker, BitBlocker, FAISSBlocking
+from pprl.blocking import LSHBlocker, BitBlocker, FAISSBlocking
 from ordered_set import OrderedSet
 import numpy as np
 from typing import List, Tuple
 import bitarray
 from networkx import Graph
-from src.pprl.matching import Matcher
+from pprl.matching import Matcher
 from collections import defaultdict
-from src.pprl.comparison_cleaning import WeightedEdgePruning, CardinalityNodePruning
+from pprl.comparison_cleaning import WeightedEdgePruning, CardinalityNodePruning
 from pybloom_live import BloomFilter as Bloom
 import hashlib
 
@@ -26,11 +26,11 @@ if __name__ == '__main__':
     path = "data/test"
 
     d1 = pd.read_csv(f"{path}/test1.csv", sep =',')
-    config = BloomFilterConfig(size=8,
-        num_hashes=2,
+    config = BloomFilterConfig(size=256,
+        num_hashes=4,
         offset=0,qgrams=2,
         hashing_type='salted_qgrams',
-        attributes = ["name", "email"])
+        attributes = ["name"])
 
     bl = BloomFilter(config)
 
@@ -46,10 +46,13 @@ if __name__ == '__main__':
 
     gt = pd.read_csv(f'{path}/gt.csv' , sep=',')
     new_bloom.set_ground_truth(gt)
-    new_bloom.evaluate()
+    new_bloom.evaluate(adjacent_bits=2, verbose=True)
     # new_enc_bitarray = new_bloom.bitarray_dict.copy()
     # print(new_bloom.bitarray_dict)
-    faiss_blocking = FAISSBlocking()
+    lsh = LSHBlocker(psi=4, lmbda=2, seed=1, prune_ratio=0.9)
+    blocks = lsh.build_blocks(new_bloom)
+
+    exit(10) 
     blocks = faiss_blocking.build_blocks(new_bloom, new_bloom.attributes, top_k=2)
     faiss_blocking.evaluate(blocks)
 

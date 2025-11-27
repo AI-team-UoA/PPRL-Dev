@@ -6,7 +6,7 @@ import hashlib
 import pandas as pd
 from metaphone import doublemetaphone
 from tqdm.auto import tqdm
-from src.pprl.encoded_data import BloomEncodedData
+from pprl.encoded_data import BloomEncodedData
 
 @dataclass
 class BloomFilterConfig:

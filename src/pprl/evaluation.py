@@ -11,8 +11,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
 
-from src.pprl.datamodel import Block, EncodedData
-from src.pprl.utils import PredictionData, generate_unique_identifier, batch_pairs
+from pprl.datamodel import Block, EncodedData
+from pprl.utils import PredictionData, generate_unique_identifier, batch_pairs
 
 @dataclass
 class Metrics:

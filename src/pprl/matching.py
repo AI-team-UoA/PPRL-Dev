@@ -13,12 +13,12 @@ from openfhe import CCParamsBGVRNS, SecurityLevel, \
 from tqdm.auto import tqdm
 import pandas as pd
 
-from src.pprl.utils import _dice, _scm
-import src.pprl.openfhe_similarity
-from src.pprl.datamodel import  Block, EncodedData
-from src.pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
-from src.pprl.evaluation import Evaluation
-from src.pprl.datamodel import PPRLFeature
+from pprl.utils import _dice, _scm
+import pprl.openfhe_similarity
+from pprl.datamodel import  Block, EncodedData
+from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
+from pprl.evaluation import Evaluation
+from pprl.datamodel import PPRLFeature
 
 
 @dataclass
