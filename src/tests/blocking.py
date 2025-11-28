@@ -73,6 +73,9 @@ class TestLSHBlocker:
 
         with pytest.raises(ValueError):
             blocks = blocker.build_blocks(mock_data, attributes=['a', 'b', 'c'])
+        with pytest.raises(ValueError):
+            blocker = LSHBlocker(psi=0, lmbda=0, seed=1, prune_ratio=0.9)
+
 
     def test_build_blocks(self):
         blocker = LSHBlocker(psi=4, lmbda=2, seed=1, prune_ratio=0.9)
@@ -88,13 +91,13 @@ class TestLSHBlocker:
         with pytest.raises(AttributeError) as ex:
             blocker.evaluate(None)
             blocker.report()
-            
+
         blocker.encoded_data = mock_data
         blocker.encoded_data.skip_ground_truth = True
         with pytest.raises(AttributeError) as ex:
             blocker.evaluate(None)
-        
-        
+
+
 
 
 
@@ -124,6 +127,20 @@ class TestLSHBlocker:
 # --- Test class for BitBlocker ---
 class TestBitBlocker:
     """TestBitBlocker"""
+
+
+    def test_args(self):
+        """Check if wrong arguments raise Errors"""
+        with pytest.raises(ValueError):
+            blocker = BitBlocker(psi=0, lmbda=0, seed=1)
+        blocker = BitBlocker(psi=4, lmbda=2, seed=1)
+        mock_data = create_mock_encoded_data(attributes=['a', 'b'], length=5)
+
+        # ACT
+        with pytest.raises(ValueError):
+            blocker.build_blocks(mock_data, attributes=['a', 'b'])
+
+
 
     def test_bitblocker_fit(self):
         """Bit Blocker fit"""
@@ -167,6 +184,7 @@ class TestFAISS:
 
         mock_data = create_mock_encoded_data(length=24, attributes=['a', 'b'])
 
+        blocks = blocker.build_blocks(encoded_data=mock_data, attributes=['a', 'b'], top_k=100)
 
         # ACT
         blocks = blocker.build_blocks(encoded_data=mock_data, attributes=['a', 'b'], top_k=1)
@@ -179,5 +197,22 @@ class TestFAISS:
 
         ev = blocker.evaluate(blocks)
         print(blocks)
-
         assert ev['F1 %'] == 100.0
+        
+        blocker = FAISSBlocking('hnsw')
+        mock_data = create_mock_encoded_data(length=24, attributes=['a', 'b'])
+        blocks = blocker.build_blocks(encoded_data=mock_data, attributes=['a', 'b'], top_k=100)
+        ev = blocker.evaluate(blocks)
+        # assert blocks[0] == {3}
+        assert ev['Recall %'] == 100.0
+        
+        with pytest.raises(AttributeError):
+            blocker.encoded_data.skip_ground_truth = True
+            blocker.evaluate(blocks)
+        
+        with pytest.raises(AttributeError):
+            blocker.encoded_data = None
+            blocker.evaluate(blocks)
+
+
+

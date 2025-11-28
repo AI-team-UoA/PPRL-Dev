@@ -51,11 +51,13 @@ if __name__ == '__main__':
     # print(new_bloom.bitarray_dict)
     lsh = BitBlocker(psi=4, lmbda=2, seed=1)
     blocks = lsh.build_blocks(new_bloom)
-    print(blocks)
-    exit(10) 
+    
+    faiss_blocking = FAISSBlocking('hnsw')
     blocks = faiss_blocking.build_blocks(new_bloom, new_bloom.attributes, top_k=2)
     faiss_blocking.evaluate(blocks)
-
+    print(blocks)
+    exit(10) 
+    
     matcher = Matcher(batch_size=1, threshold=0.7, metric='dice', concat_bf=False)
     graph : Graph = matcher.predict(encoded_data=new_bloom, blocks=blocks)
     ev = matcher.evaluate(graph)

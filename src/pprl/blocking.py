@@ -1,7 +1,7 @@
 """PPRL Blocking Methods"""
 import random
 from collections import defaultdict
-from typing import List, Dict, Union
+from typing import List, Literal, Dict, Union
 import time
 from abc import abstractmethod
 
@@ -100,7 +100,7 @@ class AbstractBlockProcessing(PPRLFeature):
 
         return eval_result
 
-    def _configuration(self)-> dict:
+    def _configuration(self)-> dict:            #pragma: no cover
         return {}
 
 class AbstractBlockBuilding(AbstractBlockProcessing):
@@ -182,18 +182,6 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
 
         return cleaned_blocks
 
-    def report(self) -> None:
-        """Prints Block Building method configuration
-        """
-        _configuration = self._configuration()
-        print(
-            "Method name: " + self._method_name +
-            "\nMethod info: " + self._method_info +
-            ("\nParameters: \n" + ''.join([f'\t{k}: {v}\n' for k, v in _configuration.items()])
-            if _configuration.items() else "\nParameters: Parameter-Free method\n") +
-            "Attributes:\n\t" + ', '.join(c for c in self.attributes ) +
-            f"\nRuntime: {self.execution_time:2.4f} seconds"
-        )
 
     @abstractmethod
     def _fit(self) -> None:
@@ -247,6 +235,9 @@ class LSHBlocker(AbstractBlockBuilding):
             prune_sample (int): number of records to sample for frequency estimation
         """
         super().__init__(seed=seed)
+        if psi < 1 or lmbda < 1 :
+            raise ValueError(f"Both Values psi and lmbda must be positive numbers : {psi}, {lmbda}")
+
         self._rng : random.Random
         self.psi = psi
         self.lmbda = lmbda
@@ -294,9 +285,10 @@ class LSHBlocker(AbstractBlockBuilding):
 
         bitarray_list: List[bitarray] = [
             sum((array for attr, array in attr_bittarays.items()
-                if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
-        ]
-        print(bitarray_list)
+                if attr in self.attributes), bitarray())
+                for attr_bittarays in bitarray_dict.values()
+            ]
+
         self._rng = random.Random(self.seed)
         self._bit_positions = self._select_bit_positions(bitarray_list)
 
@@ -305,8 +297,6 @@ class LSHBlocker(AbstractBlockBuilding):
         Generate Λ blocking keys for a single Bloom filter record.
         Each key is Ψ bits sampled from bf at selected positions.
         """
-        if self._bit_positions is None:
-            raise RuntimeError("Call fit() before blocking")
         keys = []
         for _ in range(self.lmbda):
             positions = self._rng.sample(self._bit_positions, self.psi)
@@ -365,7 +355,7 @@ class BitBlocker(AbstractBlockBuilding):
 
     def _fit(self) -> None:
         if self.encoded_data.length % 4 != 0 :
-            raise ValueError("Bloom Filters' length must multiple of 8.")
+            raise ValueError("Bloom Filters' length must multiple of 4.")
 
         self.hash_len = self.encoded_data.length * len(self.attributes)
         self.rng = random.Random(self.seed)
@@ -404,13 +394,23 @@ class FAISSBlocking(AbstractBlockBuilding):
     _method_info = "Faiss blocking."
 
 
-    def __init__(self):
+    def __init__(self, index_type: Literal['flat','hnsw'] = 'flat'):
         super().__init__()
         self.top_k: int
         self.encoded_data : BloomEncodedData
         self.neighbors : np.array
         self.distances : np.array
-        self.index : faiss.IndexBinaryFlat
+        self.index : faiss.Index
+        self.index_type = index_type
+
+
+
+    def _set_index(self, vector_size: int):
+        if 'hnsw' == self.index_type:
+            self.index = faiss.IndexBinaryHNSW(vector_size, 32)
+            self.index.metric_type = faiss.METRIC_Jaccard
+        else:
+            self.index = faiss.IndexBinaryFlat(vector_size)
 
 
 
@@ -424,8 +424,10 @@ class FAISSBlocking(AbstractBlockBuilding):
 
         bitarray_list: List[bitarray] = [
             sum((array for attr, array in attr_bittarays.items()
-                if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
+                if attr in self.attributes), bitarray())
+                for attr_bittarays in bitarray_dict.values()
         ]
+
         vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
             for b in bitarray_list], dtype=np.uint8)
 
@@ -448,10 +450,7 @@ class FAISSBlocking(AbstractBlockBuilding):
 
         return super().build_blocks(encoded_data, attributes)
 
-    # TODO
-    # d = 120
-    # index1 = faiss.IndexBinaryHNSW(d, 32)
-    # index1.metric_type = faiss.METRIC_Jaccard
+
 
     def _fit(self):
         enc_bitarray_dict : dict = self.encoded_data.bitarray_dict
@@ -459,13 +458,14 @@ class FAISSBlocking(AbstractBlockBuilding):
                         if 0 <= k < self.encoded_data.bounds[0]}
         bitarray_list: List[bitarray] = [
             sum((array for attr, array in attr_bittarays.items()
-                if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
+                if attr in self.attributes), bitarray())
+                for attr_bittarays in bitarray_dict.values()
         ]
 
         vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
             for b in bitarray_list], dtype=np.uint8)
 
-        self.index : faiss.IndexBinaryFlat = faiss.IndexBinaryFlat(len(bitarray_list[0]))
+        self._set_index(len(bitarray_list[0]))
         self.index.add(vector)
 
     def _clean_blocks(self, blocks):
