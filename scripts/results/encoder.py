@@ -1,16 +1,17 @@
 """Encoder Evaluation """
 
 
-import ast
 import os
 from itertools import product
 
 import pandas as pd
 from tqdm import tqdm
 
-from src.pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+# from src.pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 
-if __name__ == '__main__':
+
+
+def evaluate():
     PATH = "data/ccer/D2"
     FILE = 'abtclean'
     FILE2 = 'buyclean'
@@ -109,3 +110,25 @@ if __name__ == '__main__':
                 df.to_csv(f'{DIR}/{FILENAME}', mode='a+', index=False, header=not loaded)
                 loaded = os.path.exists(f"{DIR}/{FILENAME}")
 
+
+def get_results():
+    i_list = [1, 2, 4, 8, 10, 12]
+    df_list = []
+    for i in i_list:
+        filename = f'results/encoder_{i}.csv'
+        df = pd.read_csv(filename)
+        df['adjacent_bits'] = i
+        df_list.append(df)
+
+    df = pd.concat(df_list, ignore_index=False)
+
+    df = df.sort_values(by=['candidate_pairs', 'Recall %'], ascending=[True, False])
+
+    df = df.head(100)
+    df.to_csv('results/encoder_top_100.csv', index=False)
+
+
+
+
+if __name__ == '__main__':
+    get_results()

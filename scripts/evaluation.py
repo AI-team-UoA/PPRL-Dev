@@ -2,12 +2,12 @@
 import sys
 import pandas as pd
 from networkx import Graph
-from src.pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
-from src.pprl.blocking import FAISSBlocking
-from src.pprl.comparison_cleaning import WeightedEdgePruning, \
+from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from pprl.blocking import FAISSBlocking
+from pprl.comparison_cleaning import WeightedEdgePruning, \
     CardinalityEdgePruning, CardinalityNodePruning, WeightedNodePruning, \
     BLAST
-from src.pprl.matching import Matcher
+from pprl.matching import Matcher
 from pybloom_live import BloomFilter as Bloom
 import itertools
 import math
@@ -73,6 +73,8 @@ if __name__ == '__main__':
     
     ev = faiss_blocking.evaluate(blocks, verbose = True)
     print(ev)
+    print(cnt)
+    exit(10)
     matcher = Matcher(batch_size=100,threshold=0.8, metric='scm')
     graph : Graph = matcher.predict(encoded_data=new_bloom, blocks=blocks)
     ev = matcher.evaluate(graph, verbose = True)

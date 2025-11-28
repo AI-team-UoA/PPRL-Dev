@@ -17,7 +17,7 @@ def create_mock_encoded_data(attributes= None, length=12):
     mock_data.attributes = attributes
     mock_data.length = length
     # Simulate two datasets: records 0-2 (DS1) and 3-4 (DS2)
-    mock_data.bounds = [0, 3, 6]
+    mock_data.bounds = [3, 6]
 
     # Create dummy bitarray_dict
     bitarray_dict = {}
@@ -67,35 +67,57 @@ def create_mock_encoded_data(attributes= None, length=12):
 class TestLSHBlocker:
     """Test lsh blocker"""
 
+    def test_set_attributes(self):
+        blocker = LSHBlocker(psi=4, lmbda=2, seed=1, prune_ratio=0.9)
+        mock_data = create_mock_encoded_data( attributes=['a', 'b'])
+
+        with pytest.raises(ValueError):
+            blocks = blocker.build_blocks(mock_data, attributes=['a', 'b', 'c'])
+
+    def test_build_blocks(self):
+        blocker = LSHBlocker(psi=4, lmbda=2, seed=1, prune_ratio=0.9)
+        blocker.blocks = None
+        with pytest.raises(AttributeError) as ex:
+            blocker.evaluate(None)
+        mock_data = create_mock_encoded_data( attributes=['a', 'b'])
+
+        blocks = blocker.build_blocks(mock_data, attributes=['a', 'b'])
+        blocker.evaluate(None)
+
+        blocker.encoded_data = None
+        with pytest.raises(AttributeError) as ex:
+            blocker.evaluate(None)
+            blocker.report()
+            
+        blocker.encoded_data = mock_data
+        blocker.encoded_data.skip_ground_truth = True
+        with pytest.raises(AttributeError) as ex:
+            blocker.evaluate(None)
+        
+        
+
+
 
     def test_lsh_build_blocks_flow(self):
         """Test for lsh"""
 
-        # ARRANGE
         blocker = LSHBlocker(psi=4, lmbda=2, seed=1, prune_ratio=0.9)
         mock_data = create_mock_encoded_data( attributes=['a', 'b'])
-        # # Ensure _select_bit_positions is stable
-        # mocker.patch.object(blocker, '_select_bit_positions',
-        #                     return_value=list(range(5, 15)))
 
-        # ACT
-        with pytest.raises(AttributeError) as e_info: 
+        with pytest.raises(AttributeError):
             blocker.report()
+        conf = blocker._configuration()
+
+        assert conf["psi"] == 4
+
+        with pytest.raises(ValueError):
+            candidates = blocker._select_bit_positions([bitarray('0100')])
 
         blocks = blocker.build_blocks(mock_data, attributes=['a', 'b'])
         blocker.report()
 
-        # ASSERT
-        # 1. Check if the block structure is correct
         assert isinstance(blocks, dict)
-        # 2. Check if the blocks contain data from both datasets
-        # Since all DS1 records are '000...' and DS2 records are '111...',
-        # and we set a fixed seed/pruned positions, LSH keys should be consistent.
-        # Expect at least two blocks, one for DS1 and one for DS2's distinct keys.
 
-        # The keys for DS1 should be consistent, and for DS2 should be consistent,
-        # but the keys for DS1 should be different from DS2 keys.
-        # Check that blocks are correctly "cleaned" (contain pairs)
         for block in blocks.values():
             assert len(block[0]) > 0 and len(block[1]) > 0
 
@@ -159,4 +181,3 @@ class TestFAISS:
         print(blocks)
 
         assert ev['F1 %'] == 100.0
-        

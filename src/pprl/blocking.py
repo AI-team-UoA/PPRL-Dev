@@ -74,7 +74,7 @@ class AbstractBlockProcessing(PPRLFeature):
 
         ground_truth_list = list(self.encoded_data.
                         ground_truth.itertuples(index=False, name=None))
-        
+
 
         candidate_pairs = {
             (id1, id2)
@@ -85,7 +85,7 @@ class AbstractBlockProcessing(PPRLFeature):
 
 
         total_matching_pairs = len(candidate_pairs)
-        offset = self.encoded_data.bounds[1]
+        offset = self.encoded_data.bounds[0]
         true_positives = sum(
             1 for id1, id2 in candidate_pairs
             if (id1, id2-offset) in ground_truth_list
@@ -116,6 +116,7 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         super().__init__()
         self.seed : int = seed
         self.original_num_of_blocks : int
+        self.blocks : dict = None
 
     def _create_blocks(self) -> Dict[str, Dict[int, set]]:
         blocks : Dict[str, Dict[int, set]] = {}
@@ -196,13 +197,13 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
 
     @abstractmethod
     def _fit(self) -> None:
-        pass
+        pass  # pragma: no cover
 
     def _block_record(self, bf: bitarray) -> List[str]:
-        pass
+        pass # pragma: no cover
 
     def _configuration(self) -> dict:
-        return {}
+        return {}   # pragma: no cover
 
 
 
@@ -416,11 +417,10 @@ class FAISSBlocking(AbstractBlockBuilding):
     def _create_blocks(self):
         blocks : Dict[int, set] = defaultdict(set)
         bitarray_dict : dict = self.encoded_data.bitarray_dict
-        lower_bound = self.encoded_data.bounds[1]
+        lower_bound = self.encoded_data.bounds[0]
         bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in bitarray_dict.items()
                     if lower_bound <= k }
 
-        print(bitarray_dict)
 
         bitarray_list: List[bitarray] = [
             sum((array for attr, array in attr_bittarays.items()
@@ -437,7 +437,6 @@ class FAISSBlocking(AbstractBlockBuilding):
                 if _neighbor_id < 0:
                     break
                 blocks[int(_neighbor_id)].add(_entity_id)
-        print(blocks)
         return blocks
 
     def build_blocks(self,
@@ -457,22 +456,14 @@ class FAISSBlocking(AbstractBlockBuilding):
     def _fit(self):
         enc_bitarray_dict : dict = self.encoded_data.bitarray_dict
         bitarray_dict : Dict[int, Dict[str, bitarray]] = {k : v for k,v in enc_bitarray_dict.items()
-                        if 0 <= k < self.encoded_data.bounds[1]}
+                        if 0 <= k < self.encoded_data.bounds[0]}
         bitarray_list: List[bitarray] = [
             sum((array for attr, array in attr_bittarays.items()
                 if attr in self.attributes), bitarray()) for attr_bittarays in bitarray_dict.values()
         ]
 
-
-        # for bitarrays in bitarray_dict.values():
-        #     conc_bit = None
-        #     for bit_arr in bitarrays.values():
-        #         conc_bit = bit_arr if not conc_bit else conc_bit + bit_arr
-        #     bitarray_list.append(conc_bit)
-
         vector = np.array([np.frombuffer(b.tobytes(), dtype=np.uint8)
             for b in bitarray_list], dtype=np.uint8)
-
 
         self.index : faiss.IndexBinaryFlat = faiss.IndexBinaryFlat(len(bitarray_list[0]))
         self.index.add(vector)
@@ -515,7 +506,7 @@ class FAISSBlocking(AbstractBlockBuilding):
             total_matching_pairs += len(block)
 
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
-            id2 = self.encoded_data.bounds[1] + id2
+            id2 = self.encoded_data.bounds[0] + id2
             if id1 in prediction and id2 in prediction[id1]:
                 true_positives += 1
 
