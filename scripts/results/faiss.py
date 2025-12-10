@@ -8,8 +8,8 @@ from itertools import product
 import pandas as pd
 from tqdm import tqdm
 
-from src.pprl.blocking import FAISSBlocking
-from src.pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from pprl.blocking import FAISSBlocking
+from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 
 
 if __name__ == '__main__':
@@ -43,7 +43,7 @@ if __name__ == '__main__':
     metrics = ["Precision %", "Recall %", "F1 %"]
 
     DIR = "results"
-    FILENAME = "faiss.csv"
+    FILENAME = "faiss_hnsw.csv"
 
     loaded = os.path.exists(f"{DIR}/{FILENAME}")
     if loaded:
@@ -72,7 +72,7 @@ if __name__ == '__main__':
             }
 
 
-            BLOOM_NAME = 'faiss'
+            BLOOM_NAME = 'faiss_hnsw'
             config = BloomFilterConfig(**configuration)
             bl = BloomFilter(config)
             bloom_filters : BloomEncodedData = bl.encode(d1)
@@ -83,7 +83,7 @@ if __name__ == '__main__':
             new_bloom = BloomEncodedData.from_file(f'{BLOOM_NAME}_1.pkl', f'{BLOOM_NAME}_2.pkl')
             new_bloom.set_ground_truth(gt_index)
 
-            faiss_blocking = FAISSBlocking()
+            faiss_blocking = FAISSBlocking('hnsw')
             for k in range(10):
                 blocks = faiss_blocking.build_blocks(new_bloom, top_k=k+1)
                 cnt = 0
@@ -91,7 +91,7 @@ if __name__ == '__main__':
                     cnt += len(val)
 
                 ev = faiss_blocking.evaluate(blocks, verbose = False)
-                my_ev = {'name': 'FAISS Blocking', 'candidate_pairs': cnt, 'top_k': k}
+                my_ev = {'name': 'FAISS HNSW Blocking', 'candidate_pairs': cnt, 'top_k': k}
 
 
                 for keys, items in ev.items():
