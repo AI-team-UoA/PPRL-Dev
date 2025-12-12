@@ -9,6 +9,7 @@ import logging
 import pandas as pd
 import ray
 from bitarray import bitarray
+
 from pprl.utils import  are_matching
 from pprl.evaluation import Evaluation
 from pprl.datamodel import EncodedData, PPRLFeature
@@ -84,7 +85,7 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         self.ground_truth = df
         self.skip_ground_truth = False
 
-    def to_entities(self, attributes: List[str] = None,
+    def to_entities(self,
             adjacent_bits: int = 1) -> Tuple[dict, dict]:
         """
         Convert to entity-bit mapping and create inverted index.
@@ -103,15 +104,13 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         dataset = 0
 
 
-
         for idx, blooms in self.encoded_dict.items():
             if dataset < len(self.bounds) and idx >= self.bounds[dataset]:
                 dataset += 1
 
-            attributes = attributes if attributes else self.attributes
+            attributes = self.attributes
             length_encoded_dict = self.length * len(attributes)
             concatenated_bloom = []
-
             for i,attr in enumerate(attributes):
                 concatenated_bloom += [bl_i + i * self.length for bl_i in blooms[attr]]
 
@@ -123,8 +122,7 @@ class BloomEncodedData(EncodedData, PPRLFeature):
                 for i in adj_list:
                     if i in concatenated_bloom:
                         bit_key = f'{bit_key},{i}'
-                if adjacent_bits != 1 or \
-                    bit_key != f'{index}':
+                if bit_key != f'{index}':
                     key_set.add(bit_key)
                 if bit_key not in inverted_index:
                     inverted_index[bit_key] = {key: set() for key in range(len(self.bounds))}
