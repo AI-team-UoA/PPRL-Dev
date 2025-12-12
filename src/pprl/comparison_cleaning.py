@@ -47,9 +47,8 @@ class AbstractComparisonCleaning(PPRLFeature):
 
         self.candidate_pairs : Dict[int, set] = defaultdict(set)
 
-        for attr in encoded_data.attributes:
-            self._entity_index, self._inverted_index = encoded_data.to_entities(attr, adjacent_bits)
-            self.candidate_pairs = self._apply_main_processing()
+        self._entity_index, self._inverted_index = encoded_data.to_entities(adjacent_bits)
+        self.candidate_pairs = self._apply_main_processing()
 
         self.execution_time = time() - start_time
 

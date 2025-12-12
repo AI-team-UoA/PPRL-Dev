@@ -2,8 +2,11 @@
 
 from itertools import product
 import pandas as pd
-from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+import ray
+import ray.actor
 
+from pprl.comparison_cleaning import AbstractMetablocking
+from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 
 def load_dataframe(path: str, files: tuple, sep: str):
     """Loads Dataframe"""
@@ -59,5 +62,36 @@ def config_bloom_filter(attributes,
             new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
 
             new_bloom.set_ground_truth(loaded_dataframe[2])
-
             yield configuration, new_bloom
+
+
+@ray.remote
+def comparison_cleaning_exp(cc: callable, new_bloom: BloomEncodedData,
+            configuration: dict):
+    """Experiments for comparison Cleaning"""
+    wep : AbstractMetablocking = cc()
+
+    metablocking_method = cc.__name__
+    metablocking_results = []
+
+    for i in [1,2,4,8,10,12]:
+
+        new_candidates = wep.process(encoded_data=new_bloom,
+                        adjacent_bits=i)
+        ev : dict = wep.evaluate(new_candidates, verbose = False)
+
+        cnt = 0
+        for val in new_candidates.values():
+            cnt += len(val)
+
+        my_ev = {"name" : metablocking_method,
+                'candidate_pairs': cnt,
+                'adjacent_bits': i}
+
+        for keys, items in ev.items():
+            my_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+        my_ev['config'] = configuration
+        metablocking_results.append(my_ev)
+
+    return metablocking_method, metablocking_results
