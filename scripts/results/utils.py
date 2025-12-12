@@ -37,27 +37,28 @@ def config_bloom_filter(attributes,
     """BF Gerator Method"""
 
     for a, s, q in product(attributes, size, qgrams):
-        for n in range(int(s/(8*q))):
-            print(f'{n}/{int(s/(8*q))}')
-            configuration = {
-                'attributes': a,
-                'size': s,
-                'offset': 0,
-                'num_hashes': n+1,
-                'hashing_type': 'salted_qgrams',
-                'salt': '',
-                'qgrams': q
-            }
+        n = 20
+        # for n in range(int(s/(8*q))):
+            # print(f'{n}/{int(s/(8*q))}')
+        configuration = {
+            'attributes': a,
+            'size': s,
+            'offset': 0,
+            'num_hashes': n,
+            'hashing_type': 'salted_qgrams',
+            'salt': '',
+            'qgrams': q
+        }
 
-            config = BloomFilterConfig(**configuration)
-            bl = BloomFilter(config)
-            bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[0])
-            bloom_filters.to_file(f'{bloom_name}_1.pkl')
+        config = BloomFilterConfig(**configuration)
+        bl = BloomFilter(config)
+        bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[0])
+        bloom_filters.to_file(f'{bloom_name}_1.pkl')
 
-            bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[1])
-            bloom_filters.to_file(f'{bloom_name}_2.pkl')
-            new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
+        bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[1])
+        bloom_filters.to_file(f'{bloom_name}_2.pkl')
+        new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
 
-            new_bloom.set_ground_truth(loaded_dataframe[2])
+        new_bloom.set_ground_truth(loaded_dataframe[2])
 
-            yield configuration, new_bloom
+        yield configuration, new_bloom
