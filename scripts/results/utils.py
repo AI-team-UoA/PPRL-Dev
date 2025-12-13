@@ -40,27 +40,25 @@ def config_bloom_filter(attributes,
     """BF Gerator Method"""
 
     for a, s, q in product(attributes, size, qgrams):
-        n = 20
-        # for n in range(int(s/(8*q))):
-            # print(f'{n}/{int(s/(8*q))}')
-        configuration = {
-            'attributes': a,
-            'size': s,
-            'offset': 0,
-            'num_hashes': n,
-            'hashing_type': 'salted_qgrams',
-            'salt': '',
-            'qgrams': q
-        }
+        for n in range(int(s/(8*q))):
+            configuration = {
+                'attributes': a,
+                'size': s,
+                'offset': 0,
+                'num_hashes': n+1,
+                'hashing_type': 'salted_qgrams',
+                'salt': '',
+                'qgrams': q
+            }
 
-        config = BloomFilterConfig(**configuration)
-        bl = BloomFilter(config)
-        bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[0])
-        bloom_filters.to_file(f'{bloom_name}_1.pkl')
+            config = BloomFilterConfig(**configuration)
+            bl = BloomFilter(config)
+            bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[0])
+            bloom_filters.to_file(f'{bloom_name}_1.pkl')
 
-        bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[1])
-        bloom_filters.to_file(f'{bloom_name}_2.pkl')
-        new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
+            bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[1])
+            bloom_filters.to_file(f'{bloom_name}_2.pkl')
+            new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
 
             new_bloom.set_ground_truth(loaded_dataframe[2])
             yield configuration, new_bloom
@@ -96,6 +94,26 @@ def comparison_cleaning_exp(cc: callable, new_bloom: BloomEncodedData,
         metablocking_results.append(my_ev)
 
     return metablocking_method, metablocking_results
-        new_bloom.set_ground_truth(loaded_dataframe[2])
 
-        yield configuration, new_bloom
+
+@ray.remote
+def evaluate_encoder_ray(new_bloom: BloomEncodedData,
+            adjacent_bits: int, configuration: dict):
+    """Experiments for comparison Cleaning"""
+
+    ev: dict = new_bloom.evaluate(adjacent_bits = adjacent_bits,
+                    batch_size=50, verbose = False)
+    candidate_pairs = new_bloom.get_candidate_pairs(adjacent_bits)
+
+    my_ev = {'name': 'Encoder',
+        'candidate_pairs': len(candidate_pairs),
+    }
+
+    for keys, items in ev.items():
+        my_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+
+    my_ev['config'] = configuration
+
+
+    return adjacent_bits, my_ev

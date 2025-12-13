@@ -1,11 +1,10 @@
 """FAISS Results """
 
-
+import logging
 import os
 import pandas as pd
 from tqdm import tqdm
 import ray
-import logging
 from utils import load_dataframe, config_bloom_filter, comparison_cleaning_exp
 
 from pprl.comparison_cleaning import (
@@ -45,6 +44,7 @@ if __name__ == '__main__':
         new_bloom_ref = ray.put(new_bloom)
         configuration_ref = ray.put(configuration)
 
+        print(new_bloom.encoded_dict[0])
         futures = []
         for CC in [ WeightedEdgePruning,
             WeightedNodePruning,

@@ -8,11 +8,122 @@ import logging
 
 import pandas as pd
 import ray
+
 from bitarray import bitarray
 
 from pprl.utils import  are_matching
 from pprl.evaluation import Evaluation
 from pprl.datamodel import EncodedData, PPRLFeature
+
+@ray.remote
+class ConfusionMatrixRay:
+    """ConfusionMatrix Ray"""
+
+    length: int
+    ground_truth: list
+    adjacent_bits: int
+    _entities_d1: dict
+    _entities_d2: dict
+    total_length: int
+    limit: int
+    adjacent_list : list
+
+    def __init__(self, length,
+        ground_truth, adjacent_bits, total_length):
+        self.length = length
+        self.ground_truth = ground_truth
+        self.adjacent_bits = adjacent_bits
+        self.total_length = total_length
+        self.adjacent_list = list(range(self.adjacent_bits))
+
+
+
+    def _get_concat_bloom_filter(self, entity_id: int) -> set:
+        _set_concat_bf = set()
+
+        dict_to_use: Dict[any, dict] = self._entities_d1 \
+            if entity_id in self._entities_d1 \
+            else self._entities_d2
+
+        for i, bloom_filter  in enumerate(
+            dict_to_use[entity_id].values()):
+            bloom_filter_concat = [(bloom_filter_index + self.length*i)
+                    for bloom_filter_index in bloom_filter]
+            _set_concat_bf.update(set(bloom_filter_concat))
+
+        return _set_concat_bf
+
+    def set_encoded_dict(self, encoded_dict, limit):
+        """Sets encoded Dict for Confusion Matrix"""
+
+        self._entities_d1 = { key: value
+            for key, value in encoded_dict.items()
+            if key < limit }
+
+        self._entities_d2 = {key: value
+            for key, value in encoded_dict.items()
+            if key >= limit }
+        self.limit = limit
+
+    def calculate(self,
+        index : int, batch_size: int):
+        """Calculates Confusion Matrix With Ray"""
+        total_matching_pairs = 0
+        true_positives = 0
+
+
+        for i in range(index, batch_size + index):
+            _entity_d1 = self._get_concat_bloom_filter(i)
+            matching_pairs, positives = self._calculate_total(
+                        _entity_d1,
+                        i)
+            total_matching_pairs += matching_pairs
+            true_positives += positives
+
+        return total_matching_pairs, true_positives
+
+
+    def _calculate_total(self,
+        _entity_d1: set,
+        index: int):
+
+        total_matching_pairs = 0
+        true_positives = 0
+
+        for index_d2 in self._entities_d2:
+            _entity_d2 = self._get_concat_bloom_filter(index_d2)
+
+            matching = (index, index_d2-self.limit) in self.ground_truth
+
+            matching_pairs, true_positive = self._calculate_one(
+                    _entity_d1, _entity_d2, matching
+            )
+            total_matching_pairs += matching_pairs
+            true_positives += true_positive
+
+        return total_matching_pairs, true_positives
+
+    def _calculate_one(self,
+        _entity_d1: set,
+        _entity_d2: set,
+        matching: bool) -> tuple:
+
+        total_matching_pairs = 0
+        true_positive = 0
+        for bit in range((self.total_length +
+                          self.adjacent_bits - 1) //  self.adjacent_bits):
+            adj_list = [(i + bit * self.adjacent_bits) for i in self.adjacent_list]
+            cont_a = [i for i in adj_list if i in _entity_d1]
+            cont_b = [i for i in adj_list if i in _entity_d2]
+            if len(cont_b) == 0 or len(cont_a) == 0:
+                continue
+            if cont_a == cont_b:
+                total_matching_pairs += 1
+                if matching and not true_positive:
+                    true_positive += 1
+
+        return total_matching_pairs, true_positive
+
 
 class BloomEncodedData(EncodedData, PPRLFeature):
     """
@@ -199,30 +310,10 @@ class BloomEncodedData(EncodedData, PPRLFeature):
                     for bloom_filter_index in bloom_filter]
             _set_concat_bf.update(set(bloom_filter_concat))
 
+
         return _set_concat_bf
 
-    def _calculate_matching_pairs_and_true_positive(self,
-        adjacent_list: list,
-        total_length: int,
-        adjacent_bits: int,
-        _entity_d1: set,
-        _entity_d2: set,
-        matching: bool) -> tuple:
 
-        total_matching_pairs = 0
-        true_positive = 0
-        for bit in range((total_length + adjacent_bits - 1) //  adjacent_bits):
-            adj_list = [(i + bit * adjacent_bits) for i in adjacent_list]
-            cont_a = [i for i in adj_list if i in _entity_d1]
-            cont_b = [i for i in adj_list if i in _entity_d2]
-            if len(cont_b) == 0 or len(cont_a) == 0:
-                continue
-            if cont_a == cont_b:
-                total_matching_pairs += 1
-                if matching and not true_positive:
-                    true_positive += 1
-
-        return total_matching_pairs, true_positive
 
     @ray.remote
     def _ray_get_candidate_pairs(self, index: int, adjacent_bits: int) -> list:
@@ -249,38 +340,8 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
         return candidate_pairs
 
-    @ray.remote
-    def _ray_calculate_confusion_matrix(self,
-        index : int,
-        ground_truth: list,
-        adjacent_bits: int):
 
-        total_matching_pairs = 0
-        true_positives = 0
 
-        adjacent_list = list(range(adjacent_bits))
-        total_length = len(self.attributes) * self.length
-
-        _entity_d1 = self._get_set_concat_bloom_filter(index)
-
-        _entities_d2 = {key: value
-                for key, value in self.encoded_dict.items()
-                if key >= self.bounds[0]}
-
-        for index_d2 in _entities_d2:
-            _entity_d2 = self._get_set_concat_bloom_filter(index_d2)
-
-            matching = (index, index_d2-self.bounds[0]) in ground_truth
-
-            matching_pairs, true_positive = \
-                self._calculate_matching_pairs_and_true_positive(
-                    adjacent_list, total_length, adjacent_bits,
-                    _entity_d1, _entity_d2, matching
-                )
-            total_matching_pairs += matching_pairs
-            true_positives += true_positive
-
-        return total_matching_pairs, true_positives
 
 
     def get_candidate_pairs(self, adjacent_bits: int = 1) -> list:
@@ -320,6 +381,7 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
     def evaluate(self,
             adjacent_bits: int = 1,
+            batch_size: int = 100,
             export_to_df: bool = False,
             with_classification_report: bool = False,
             verbose: bool = True) -> any:
@@ -344,21 +406,39 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         total_matching_pairs = 0
         true_positives = 0
 
+        encoded_dict_ref = ray.put(self.encoded_dict)
+
         if not ray.is_initialized():
             logging.getLogger("ray").setLevel(logging.ERROR)
             ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
-        self_ref = ray.put(self)
-        gtruth_ref = ray.put(ground_truth_list)
+        total_length = len(self.attributes) * self.length
+
+        num_actors = 5
+
+        actors = []
+        set_encoded_dict = []
+
+        for _ in range(num_actors):
+            actor = ConfusionMatrixRay.remote(self.length,
+                                ground_truth_list,
+                                adjacent_bits, total_length)
+            future = actor.set_encoded_dict.remote(encoded_dict_ref, self.bounds[0])
+            actors.append(actor)
+            set_encoded_dict.append(future)
+
+        ray.get(set_encoded_dict)
+
+
+        actor_index = 0
+
+
         futures = []
-
-
-        for i in range(self.bounds[0]):
-            future = self._ray_calculate_confusion_matrix.remote(self_ref,
-                index=i,
-                ground_truth = gtruth_ref, adjacent_bits = adjacent_bits,
-            )
+        for i in range(0, self.bounds[0], batch_size):
+            actor = actors[actor_index % num_actors]
+            future = actor.calculate.remote(i, batch_size)
             futures.append(future)
+            actor_index += 1
 
         results = ray.get(futures)
         for total, posititves in results:

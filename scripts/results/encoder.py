@@ -43,7 +43,7 @@ def evaluate():
 
 
     attributes = [['name']]
-    size = [64, 128, 256, 512, 1024]
+    size = [64, 128, 256, 512, 1024].reverse()
     qgrams = [2,3,4]
 
     TOTAL_OUTER = len(attributes) * len(size) * len(qgrams)
