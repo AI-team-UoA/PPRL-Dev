@@ -1,0 +1,2 @@
+name,candidate_pairs,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Encoder,946632,0.22,99.32,0.44,2199,986957,2619,15,"{'attributes': ['title'], 'size': 64, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"

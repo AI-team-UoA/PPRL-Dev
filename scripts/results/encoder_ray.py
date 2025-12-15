@@ -32,11 +32,11 @@ from utils import load_dataframe, config_bloom_filter, evaluate_encoder_ray
 
 if __name__ == '__main__':
 
-    DIR = "D3"
+    DIR = "D4"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'amazonclean'
-    FILE2 = 'gpclean'
-    SEP = '#'
+    FILE = 'dblpclean'
+    FILE2 = 'acmclean'
+    SEP = '%'
     RESULTS = f"results/blocking/{DIR}"
     attributes = [['title']]
     size = [64, 128, 256, 512, 1024]
@@ -55,10 +55,22 @@ if __name__ == '__main__':
         total=TOTAL_LENGTH):
 
         futures = []
+
+        MAX_CONCURRENT = 2
+
         for adjacent_bits in [1,2,4,8,10,12]:
             future = evaluate_encoder_ray.remote(new_bloom,
                                 adjacent_bits, configuration)
             futures.append(future)
+            if len(futures) == MAX_CONCURRENT:
+                done, futures = ray.wait(futures, num_returns=1)
+                adj_bit, bloom_evaluation = ray.get(done[0])
+                FILENAME = f"blocking_encoder_{adj_bit}.csv"
+                LOADED = os.path.exists(f"{RESULTS}/{FILENAME}")
+                df = pd.DataFrame([bloom_evaluation])
+                df.to_csv(f'{RESULTS}/{FILENAME}',
+                mode='a+', index=False, header=not LOADED)
+
 
         for adjacent_bits, bloom_evaluation in ray.get(futures):
             FILENAME = f"blocking_encoder_{adjacent_bits}.csv"

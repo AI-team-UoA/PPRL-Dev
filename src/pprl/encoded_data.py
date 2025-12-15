@@ -414,7 +414,7 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
         total_length = len(self.attributes) * self.length
 
-        num_actors = 5
+        num_actors = 15
 
         actors = []
         set_encoded_dict = []
