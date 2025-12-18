@@ -32,19 +32,21 @@ from utils import load_dataframe, config_bloom_filter, evaluate_encoder_ray
 
 if __name__ == '__main__':
 
-    DIR = "D2"
+    DIR = "D4"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'abtclean'
-    FILE2 = 'buyclean'
-    SEP = '|'
+    FILE = 'dblpclean'
+    FILE2 = 'acmclean'
+    SEP = '%'
     RESULTS = f"results/blocking/{DIR}"
-    attributes = [['name']]
+    attributes = [['title']]
     size = [64, 128, 256, 512, 1024]
     qgrams = [2,3,4]
     TOTAL_LENGTH = 266
     MAX_CONCURRENT = 30
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
+
+    print(f"Runing experiments for {DIR}")
 
     if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
@@ -78,3 +80,5 @@ if __name__ == '__main__':
         df = pd.DataFrame([bloom_evaluation])
         df.to_csv(f'{RESULTS}/{FILENAME}',
                 mode='a+', index=False, header=not LOADED)
+
+    print(f"Finished experiments for {DIR}")
