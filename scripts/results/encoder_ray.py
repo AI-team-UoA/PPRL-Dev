@@ -63,7 +63,6 @@ if __name__ == '__main__':
                                 adjacent_bits, configuration)
             futures.append(future)
             if len(futures) == MAX_CONCURRENT:
-                print("mpika?")
                 done, futures = ray.wait(futures, num_returns=1)
                 adj_bit, bloom_evaluation = ray.get(done[0])
                 FILENAME = f"blocking_encoder_{adj_bit}.csv"
