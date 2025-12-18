@@ -101,12 +101,11 @@ def evaluate_encoder_ray(new_bloom: BloomEncodedData,
             adjacent_bits: int, configuration: dict):
     """Experiments for comparison Cleaning"""
 
-    ev: dict = new_bloom.evaluate(adjacent_bits = adjacent_bits,
-                    batch_size=50, verbose = False)
-    candidate_pairs = new_bloom.get_candidate_pairs(adjacent_bits)
+    ev: dict = new_bloom.serial_evaluate(adjacent_bits = adjacent_bits,
+                    verbose = False)
 
     my_ev = {'name': 'Encoder',
-        'candidate_pairs': len(candidate_pairs),
+        'candidate_pairs': len(new_bloom.candidate_pairs),
     }
 
     for keys, items in ev.items():
