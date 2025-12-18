@@ -10,6 +10,7 @@ import pandas as pd
 import ray
 
 from bitarray import bitarray
+import numpy as np
 
 from pprl.utils import  are_matching
 from pprl.evaluation import Evaluation
@@ -140,6 +141,7 @@ class BloomEncodedData(EncodedData, PPRLFeature):
     dataset_limit : int
     bounds : List[int]
     inverted_index : Dict[int, Dict[str, set]]
+    candidate_pairs: set
     """inverted_index :   position_of_bit : entities {D0: x,y,z,...} and {D1: x2,y2,z2,...}"""
 
     def __init__(self, data: Dict[int, Dict[str, List[int]]] = None, length: int = 0):
@@ -379,6 +381,109 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         return candidate_pairs
 
 
+    def serial_evaluate(self,
+        adjacent_bits: int = 1,
+        export_to_df: bool = False,
+        with_classification_report: bool = False,
+        verbose: bool = True) -> any:
+        """Function to evaluate encoder treating it
+        as a blocking method: f1-score, recall and precision
+
+        Args:
+            export_to_df (bool) : Create evaluation dataframe
+            with_classification_report (bool) : Printing Info for the blocking method
+            with_stats (bool) : Printing Method's Statistics
+
+        Returns:
+            Evaluation : Evaluation Object with F1, Recall, Precision etc.
+        """
+        if self.skip_ground_truth:
+            raise AttributeError("Can not proceed to evaluation without a ground-truth file."
+                    "Data object has not been initialized with the ground-truth file")
+
+        eval_obj = Evaluation(self)
+
+        ground_truth_list = list(self.ground_truth.itertuples(index=False, name=None))
+        total_matching_pairs = 0
+        true_positives = 0
+        total_length = len(self.attributes) * self.length
+
+        self.candidate_pairs = set()
+
+        bloom_filter_matrix = np.zeros(
+            (len(self.encoded_dict), total_length),
+            dtype=bool )
+
+
+
+        for entity_id, fields in self.encoded_dict.items():
+            for i, bloom_filter_indices in enumerate(fields.values()):
+                offset = i * self.length
+                if bloom_filter_indices:
+                    bloom_filter_matrix[entity_id,
+                        np.array(bloom_filter_indices) + offset]  = True
+
+
+        for id_1 in range(self.bounds[0]):
+            entity_1 = bloom_filter_matrix[id_1]
+            for id_2 in range(self.bounds[0], self.bounds[1]):
+                entity_2 = bloom_filter_matrix[id_2]
+                matching_pairs = self._get_matching_pairs(
+                    entity_1, entity_2,
+                    adjacent_bits
+                )
+                total_matching_pairs += matching_pairs
+                if (id_1, id_2) not in self.candidate_pairs and \
+                    matching_pairs:
+                    if (id_1, id_2 - self.bounds[0]) in ground_truth_list:
+                        true_positives += 1
+                    self.candidate_pairs.add((id_1, id_2))
+
+        eval_obj.calculate_scores(true_positives=true_positives,
+                                total_matching_pairs=total_matching_pairs)
+        eval_result = eval_obj.report(self.method_configuration(),
+                                export_to_df,
+                                with_classification_report,
+                                verbose)
+
+        return eval_result
+
+    def _get_matching_pairs(self, entity_1: np.array,
+                    entity_2: np.array,
+                    adjacent_bits):
+        matching_pairs = 0
+
+        n_slices = len(entity_1) // adjacent_bits
+        limit = n_slices * adjacent_bits
+
+        sliced_1: np.array = entity_1[:limit].reshape(n_slices, adjacent_bits)
+        sliced_2: np.array = entity_2[:limit].reshape(n_slices, adjacent_bits)
+
+        sliced_1_has_active_bits = sliced_1.any(axis=1)
+        sliced_2_has_active_bits = sliced_2.any(axis=1)
+
+        matches = (sliced_1 == sliced_2).all(axis=1)
+
+        valid_matches = matches & \
+            sliced_1_has_active_bits & sliced_2_has_active_bits
+
+        matching_pairs = np.count_nonzero(valid_matches)
+
+        if len(entity_1) % adjacent_bits != 0:
+            remaining_1 = entity_1[limit:]
+            remaining_2 = entity_2[limit:]
+            remaining_1_has_active_bits = remaining_1.any()
+            remaining_2_has_active_bits = remaining_2.any()
+            matches = np.array_equal(remaining_1, remaining_2)
+            if matches and remaining_1_has_active_bits \
+                and remaining_2_has_active_bits:
+                    matching_pairs += 1
+
+
+
+        return matching_pairs
+
+
     def evaluate(self,
             adjacent_bits: int = 1,
             batch_size: int = 100,
@@ -406,11 +511,12 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         total_matching_pairs = 0
         true_positives = 0
 
-        encoded_dict_ref = ray.put(self.encoded_dict)
 
         if not ray.is_initialized():
             logging.getLogger("ray").setLevel(logging.ERROR)
             ray.init(log_to_driver=False, logging_level=logging.ERROR)
+
+        encoded_dict_ref = ray.put(self.encoded_dict)
 
         total_length = len(self.attributes) * self.length
 

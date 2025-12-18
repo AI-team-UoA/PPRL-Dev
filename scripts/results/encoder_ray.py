@@ -32,16 +32,17 @@ from utils import load_dataframe, config_bloom_filter, evaluate_encoder_ray
 
 if __name__ == '__main__':
 
-    DIR = "D4"
+    DIR = "D2"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'acmclean'
-    SEP = '%'
+    FILE = 'abtclean'
+    FILE2 = 'buyclean'
+    SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
-    attributes = [['title']]
+    attributes = [['name']]
     size = [64, 128, 256, 512, 1024]
     qgrams = [2,3,4]
     TOTAL_LENGTH = 266
+    MAX_CONCURRENT = 30
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
 
@@ -49,20 +50,20 @@ if __name__ == '__main__':
         logging.getLogger("ray").setLevel(logging.ERROR)
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
+    futures = []
 
     for configuration, new_bloom in tqdm(
         config_bloom_filter(attributes, size, qgrams, 'standard_blokcing', loaded_dataframe),
         total=TOTAL_LENGTH):
 
-        futures = []
 
-        MAX_CONCURRENT = 2
 
         for adjacent_bits in [1,2,4,8,10,12]:
             future = evaluate_encoder_ray.remote(new_bloom,
                                 adjacent_bits, configuration)
             futures.append(future)
             if len(futures) == MAX_CONCURRENT:
+                print("mpika?")
                 done, futures = ray.wait(futures, num_returns=1)
                 adj_bit, bloom_evaluation = ray.get(done[0])
                 FILENAME = f"blocking_encoder_{adj_bit}.csv"
@@ -72,9 +73,9 @@ if __name__ == '__main__':
                 mode='a+', index=False, header=not LOADED)
 
 
-        for adjacent_bits, bloom_evaluation in ray.get(futures):
-            FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
-            LOADED = os.path.exists(f"{RESULTS}/{FILENAME}")
-            df = pd.DataFrame([bloom_evaluation])
-            df.to_csv(f'{RESULTS}/{FILENAME}',
-                    mode='a+', index=False, header=not LOADED)
+    for adjacent_bits, bloom_evaluation in ray.get(futures):
+        FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
+        LOADED = os.path.exists(f"{RESULTS}/{FILENAME}")
+        df = pd.DataFrame([bloom_evaluation])
+        df.to_csv(f'{RESULTS}/{FILENAME}',
+                mode='a+', index=False, header=not LOADED)
