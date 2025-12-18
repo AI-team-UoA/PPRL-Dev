@@ -10,8 +10,9 @@
 
 ## Blocking
 
-- [x] D3 Pending 13/12 12:00 @pyravlos5
-- [x] D4 Pending 15/12 12:50  @pyravlos3
+- [x] D2 Finished 18/12 20:00 @pyravlos3
+- [x] D3 Pending 18/12 17:00 @pyravlos5
+- [x] D4 Pending 18/12 20:00  @pyravlos3
 - [ ] D8 N/A
 - [ ] D9 N/A
 - [ ] D10 N/A
