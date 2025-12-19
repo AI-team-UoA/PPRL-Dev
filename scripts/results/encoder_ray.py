@@ -32,11 +32,11 @@ from utils import load_dataframe, config_bloom_filter, evaluate_encoder_ray
 
 if __name__ == '__main__':
 
-    DIR = "D4"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'acmclean'
-    SEP = '%'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
+    SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
     attributes = [['title']]
     size = [64, 128, 256, 512, 1024]
