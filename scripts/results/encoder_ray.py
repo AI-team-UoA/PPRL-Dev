@@ -32,19 +32,23 @@ from utils import load_dataframe, config_bloom_filter, evaluate_encoder_ray
 
 if __name__ == '__main__':
 
-    DIR = "D2"
+
+
+    DIR = "D3"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'abtclean'
-    FILE2 = 'buyclean'
-    SEP = '|'
+    FILE = 'amazonclean'
+    FILE2 = 'gpclean'
+    SEP = '#'
     RESULTS = f"results/blocking/{DIR}"
-    attributes = [['name']]
+    attributes = [['title']]
     size = [64, 128, 256, 512, 1024]
     qgrams = [2,3,4]
     TOTAL_LENGTH = 266
     MAX_CONCURRENT = 30
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
+
+    print(f"RUNING {DIR} EXPERIMENTS")
 
     if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
