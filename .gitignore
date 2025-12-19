@@ -4,3 +4,7 @@
 /results/__pycache__
 *.pkl
 *.log
+src/pprl.egg-info/dependency_links.txt
+src/pprl.egg-info/PKG-INFO
+src/pprl.egg-info/SOURCES.txt
+src/pprl.egg-info/top_level.txt

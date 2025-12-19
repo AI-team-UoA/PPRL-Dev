@@ -12,7 +12,7 @@
 
 - [x] D2 Finished 18/12 20:00 @pyravlos3
 - [x] D3 Pending 18/12 17:00 @pyravlos5
-- [ ] D4 N/A
+- [x] D4 Pending 18/12 20:00  @pyravlos3
 - [ ] D8 N/A
 - [ ] D9 N/A
 - [ ] D10 N/A
