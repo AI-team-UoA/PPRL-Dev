@@ -427,11 +427,11 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
 
         switch = self.bounds[0] < self.bounds[1] - self.bounds[0]
+
+
         total_matching_pairs, true_positives = self._get_matching_pairs_loop(
             bloom_filter_matrix, switch, adjacent_bits,
             ground_truth_list)
-
-
 
 
         eval_obj.calculate_scores(true_positives=true_positives,
@@ -445,72 +445,104 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
     def _get_matching_pairs_loop(self, bloom_filter_matrix: np.array,
                             switch: bool, adjacent_bits: int, ground_truth_list):
-        first_loop_range = range(self.bounds[0]) if not switch \
-            else range(self.bounds[0], self.bounds[1])
-        second_loop_range =  range(self.bounds[0], self.bounds[1]) if not switch \
-            else range(self.bounds[0])
 
-        _cache_sliced = {}
-        n_slices = None
-        limit = None
+        BATCH_SIZE = 1_000
 
         total_matching_pairs = 0
         true_positives = 0
-        for id_first in first_loop_range:
-            entity_1 : np.array = bloom_filter_matrix[id_first]
-            if n_slices is None:
-                n_slices = len(entity_1) // adjacent_bits
-                limit = n_slices * adjacent_bits
 
-            sliced_1: np.array = entity_1[:limit].reshape(-1, adjacent_bits)
-            for id_second in second_loop_range:
-                entity_2 = bloom_filter_matrix[id_second]
-
-                if id_second in _cache_sliced:
-                    sliced_2 = _cache_sliced[id_second]
-                else:
-                    sliced_2: np.array = entity_2[:limit].reshape(-1, adjacent_bits)
-                    _cache_sliced[id_second] = sliced_2
+        first_loop_range = range(0, self.bounds[0], BATCH_SIZE) if not switch \
+            else range(self.bounds[0], self.bounds[1], BATCH_SIZE)
 
 
-                valid_matches = np.all(sliced_1 == sliced_2, axis=1) & sliced_1.any(axis=1)
-                matching_pairs = np.count_nonzero(valid_matches)
+        second_loop_range =  range(self.bounds[0], self.bounds[1]) if not switch \
+            else range(self.bounds[0])
 
-                if len(entity_1) % adjacent_bits != 0:
-                    remaining_1 = entity_1[limit:]
-                    remaining_2 = entity_2[limit:]
-                    remaining_1_has_active_bits = remaining_1.any()
-                    if np.array_equal(remaining_1, remaining_2) and remaining_1_has_active_bits:
-                        matching_pairs += 1
-
-                id_1 = id_first if id_first < id_second else id_second
-                id_2 = id_second if id_first < id_second else id_first
+        entity_1 : np.array = bloom_filter_matrix[0]
+        n_slices = len(entity_1) // adjacent_bits
+        limit = n_slices * adjacent_bits
 
 
-                total_matching_pairs += matching_pairs
-                if (id_1, id_2) not in self.candidate_pairs and \
-                    matching_pairs:
-                    if (id_1, id_2 - self.bounds[0]) in ground_truth_list:
-                        true_positives += 1
-                    self.candidate_pairs.add((id_1, id_2))
+        total_matching_pairs = 0
+        true_positives = 0
 
-        return total_matching_pairs, true_positives
+        sliced_2 = np.stack([
+            bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
+            for i in second_loop_range
+        ]
+        )
+
+        sliced_2 = sliced_2[None, :, :, :]
+
+        remaining_2 = np.stack([
+            bloom_filter_matrix[i][limit:]
+            for i in second_loop_range
+        ])
+
+        remaining_2 = remaining_2[None, :, :]
+
+        ground_truth_array = np.array(ground_truth_list).T
 
 
-
-    def _get_matching_pairs(self, entity_1: np.array,
-                    entity_2: np.array,
-                    adjacent_bits):
-        matching_pairs = 0
+        offset = 0
+        if switch:
+            ground_truth_array[[0,1]] = ground_truth_array[[1,0]]
+            offset = self.bounds[0]
 
 
 
-        sliced_1: np.array = entity_1[:limit].reshape(-1, adjacent_bits)
+        for start_batch in first_loop_range:
+            end_batch = start_batch + BATCH_SIZE
+
+
+            if switch and end_batch > self.bounds[1]:
+                end_batch = self.bounds[1]
+            elif not switch and end_batch > self.bounds[0]:
+                end_batch = self.bounds[0]
+
+            ground_truth_batch = ground_truth_array[:,
+                        ground_truth_array[0]  >= start_batch - offset]
+
+
+            ground_truth_batch = ground_truth_batch[:,
+                        ground_truth_batch[0] < end_batch - offset]
+
+
+            sliced_1 = np.stack([
+                bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
+                for i in range(start_batch, end_batch)
+            ])
+
+            sliced_1 = sliced_1[:, None, :, :]
+
+            remaining_1 = np.stack([
+                bloom_filter_matrix[i][limit:]
+                for i in range(start_batch, end_batch)
+            ])
+
+
+            valid_matches = np.all(sliced_1 == sliced_2, axis=3) & sliced_1.any(axis=3)
+
+
+            if remaining_1.size > 0:
+                remaining_1 = remaining_1[:, None, :]
+                remaing_valid_matches = np.all(remaining_1 == remaining_2, axis=2) & remaining_1.any(axis=2)
+
+                remaing_valid_matches = remaing_valid_matches[..., np.newaxis]  # shape (2, 3, 1)
+                valid_matches = np.concatenate((valid_matches, remaing_valid_matches), axis=2)
+
+
+            matching_pairs = np.count_nonzero(valid_matches, axis=2)
+            total_matching_pairs += np.sum(matching_pairs)
+
+            true_pairs = matching_pairs[ground_truth_batch[0] - start_batch + offset, ground_truth_batch[1]]
+            true_positives += np.count_nonzero(true_pairs)
+
+
+        return int(total_matching_pairs), int(true_positives)
 
 
 
-
-        return matching_pairs
 
 
     def evaluate(self,

@@ -36,6 +36,8 @@ if __name__ == '__main__':
     PATH = f"data/ccer/{DIR}"
     FILE = 'walmartclean'
     FILE2 = 'amazonclean'
+
+
     SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
     attributes = [['title']]
@@ -59,26 +61,26 @@ if __name__ == '__main__':
         total=TOTAL_LENGTH):
 
 
-
         for adjacent_bits in [1,2,4,8,10,12]:
+
             future = evaluate_encoder_ray.remote(new_bloom,
                                 adjacent_bits, configuration)
             futures.append(future)
-            if len(futures) == MAX_CONCURRENT:
-                done, futures = ray.wait(futures, num_returns=1)
-                adj_bit, bloom_evaluation = ray.get(done[0])
-                FILENAME = f"blocking_encoder_{adj_bit}.csv"
-                LOADED = os.path.exists(f"{RESULTS}/{FILENAME}")
-                df = pd.DataFrame([bloom_evaluation])
-                df.to_csv(f'{RESULTS}/{FILENAME}',
-                mode='a+', index=False, header=not LOADED)
+
+        for adjacent_bits, bloom_evaluation in ray.get(futures):
+            FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
+            LOADED = os.path.exists(f"{RESULTS}/{FILENAME}")
+            df = pd.DataFrame([bloom_evaluation])
+            df.to_csv(f'{RESULTS}/{FILENAME}',
+                    mode='a+', index=False, header=not LOADED)
 
 
-    for adjacent_bits, bloom_evaluation in ray.get(futures):
-        FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
-        LOADED = os.path.exists(f"{RESULTS}/{FILENAME}")
-        df = pd.DataFrame([bloom_evaluation])
-        df.to_csv(f'{RESULTS}/{FILENAME}',
-                mode='a+', index=False, header=not LOADED)
+
+    #     for adjacent_bits in [1,2,4,8,10,12]:
+    #         if len(futures) == MAX_CONCURRENT:
+    #             done, futures = ray.wait(futures, num_returns=1)
+    #             adj_bit, bloom_evaluation = ray.get(done[0])
+
+
 
     print(f"Finished experiments for {DIR}")
