@@ -424,20 +424,15 @@ class BloomEncodedData(EncodedData, PPRLFeature):
                         np.array(bloom_filter_indices) + offset]  = True
 
 
-        for id_1 in range(self.bounds[0]):
-            entity_1 = bloom_filter_matrix[id_1]
-            for id_2 in range(self.bounds[0], self.bounds[1]):
-                entity_2 = bloom_filter_matrix[id_2]
-                matching_pairs = self._get_matching_pairs(
-                    entity_1, entity_2,
-                    adjacent_bits
-                )
-                total_matching_pairs += matching_pairs
-                if (id_1, id_2) not in self.candidate_pairs and \
-                    matching_pairs:
-                    if (id_1, id_2 - self.bounds[0]) in ground_truth_list:
-                        true_positives += 1
-                    self.candidate_pairs.add((id_1, id_2))
+
+
+        switch = self.bounds[0] < self.bounds[1] - self.bounds[0]
+        total_matching_pairs, true_positives = self._get_matching_pairs_loop(
+            bloom_filter_matrix, switch, adjacent_bits,
+            ground_truth_list)
+
+
+
 
         eval_obj.calculate_scores(true_positives=true_positives,
                                 total_matching_pairs=total_matching_pairs)
@@ -448,36 +443,70 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
         return eval_result
 
+    def _get_matching_pairs_loop(self, bloom_filter_matrix: np.array,
+                            switch: bool, adjacent_bits: int, ground_truth_list):
+        first_loop_range = range(self.bounds[0]) if not switch \
+            else range(self.bounds[0], self.bounds[1])
+        second_loop_range =  range(self.bounds[0], self.bounds[1]) if not switch \
+            else range(self.bounds[0])
+
+        _cache_sliced = {}
+        n_slices = None
+        limit = None
+
+        total_matching_pairs = 0
+        true_positives = 0
+        for id_first in first_loop_range:
+            entity_1 : np.array = bloom_filter_matrix[id_first]
+            if n_slices is None:
+                n_slices = len(entity_1) // adjacent_bits
+                limit = n_slices * adjacent_bits
+
+            sliced_1: np.array = entity_1[:limit].reshape(-1, adjacent_bits)
+            for id_second in second_loop_range:
+                entity_2 = bloom_filter_matrix[id_second]
+
+                if id_second in _cache_sliced:
+                    sliced_2 = _cache_sliced[id_second]
+                else:
+                    sliced_2: np.array = entity_2[:limit].reshape(-1, adjacent_bits)
+                    _cache_sliced[id_second] = sliced_2
+
+
+                valid_matches = np.all(sliced_1 == sliced_2, axis=1) & sliced_1.any(axis=1)
+                matching_pairs = np.count_nonzero(valid_matches)
+
+                if len(entity_1) % adjacent_bits != 0:
+                    remaining_1 = entity_1[limit:]
+                    remaining_2 = entity_2[limit:]
+                    remaining_1_has_active_bits = remaining_1.any()
+                    if np.array_equal(remaining_1, remaining_2) and remaining_1_has_active_bits:
+                        matching_pairs += 1
+
+                id_1 = id_first if id_first < id_second else id_second
+                id_2 = id_second if id_first < id_second else id_first
+
+
+                total_matching_pairs += matching_pairs
+                if (id_1, id_2) not in self.candidate_pairs and \
+                    matching_pairs:
+                    if (id_1, id_2 - self.bounds[0]) in ground_truth_list:
+                        true_positives += 1
+                    self.candidate_pairs.add((id_1, id_2))
+
+        return total_matching_pairs, true_positives
+
+
+
     def _get_matching_pairs(self, entity_1: np.array,
                     entity_2: np.array,
                     adjacent_bits):
         matching_pairs = 0
 
-        n_slices = len(entity_1) // adjacent_bits
-        limit = n_slices * adjacent_bits
 
-        sliced_1: np.array = entity_1[:limit].reshape(n_slices, adjacent_bits)
-        sliced_2: np.array = entity_2[:limit].reshape(n_slices, adjacent_bits)
 
-        sliced_1_has_active_bits = sliced_1.any(axis=1)
-        sliced_2_has_active_bits = sliced_2.any(axis=1)
+        sliced_1: np.array = entity_1[:limit].reshape(-1, adjacent_bits)
 
-        matches = (sliced_1 == sliced_2).all(axis=1)
-
-        valid_matches = matches & \
-            sliced_1_has_active_bits & sliced_2_has_active_bits
-
-        matching_pairs = np.count_nonzero(valid_matches)
-
-        if len(entity_1) % adjacent_bits != 0:
-            remaining_1 = entity_1[limit:]
-            remaining_2 = entity_2[limit:]
-            remaining_1_has_active_bits = remaining_1.any()
-            remaining_2_has_active_bits = remaining_2.any()
-            matches = np.array_equal(remaining_1, remaining_2)
-            if matches and remaining_1_has_active_bits \
-                and remaining_2_has_active_bits:
-                    matching_pairs += 1
 
 
 
