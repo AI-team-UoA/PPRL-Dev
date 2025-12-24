@@ -38,9 +38,19 @@ if __name__ == '__main__':
     FILE2 = 'dbpediaclean'
 
 
+    # DIR = "D9"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'dblpclean'
+    # FILE2 = 'scholarclean'
+
+    # SEP = '>'
+    # attributes = [['title']]
+
+
     SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
     attributes = [['title', 'starring']]
+
 
     size = [64, 128, 256, 512]
     qgrams = [2,3,4]
@@ -74,6 +84,7 @@ if __name__ == '__main__':
         config_bloom_filter(attributes, size, qgrams,
                 'standard_blokcing', loaded_dataframe, adjacent_config),
         total=TOTAL_LENGTH):
+
 
         if configuration is None and new_bloom is None:
             continue

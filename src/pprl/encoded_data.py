@@ -16,114 +16,6 @@ from pprl.utils import  are_matching
 from pprl.evaluation import Evaluation
 from pprl.datamodel import EncodedData, PPRLFeature
 
-@ray.remote
-class ConfusionMatrixRay:
-    """ConfusionMatrix Ray"""
-
-    length: int
-    ground_truth: list
-    adjacent_bits: int
-    _entities_d1: dict
-    _entities_d2: dict
-    total_length: int
-    limit: int
-    adjacent_list : list
-
-    def __init__(self, length,
-        ground_truth, adjacent_bits, total_length):
-        self.length = length
-        self.ground_truth = ground_truth
-        self.adjacent_bits = adjacent_bits
-        self.total_length = total_length
-        self.adjacent_list = list(range(self.adjacent_bits))
-
-
-
-    def _get_concat_bloom_filter(self, entity_id: int) -> set:
-        _set_concat_bf = set()
-
-        dict_to_use: Dict[any, dict] = self._entities_d1 \
-            if entity_id in self._entities_d1 \
-            else self._entities_d2
-
-        for i, bloom_filter  in enumerate(
-            dict_to_use[entity_id].values()):
-            bloom_filter_concat = [(bloom_filter_index + self.length*i)
-                    for bloom_filter_index in bloom_filter]
-            _set_concat_bf.update(set(bloom_filter_concat))
-
-        return _set_concat_bf
-
-    def set_encoded_dict(self, encoded_dict, limit):
-        """Sets encoded Dict for Confusion Matrix"""
-
-        self._entities_d1 = { key: value
-            for key, value in encoded_dict.items()
-            if key < limit }
-
-        self._entities_d2 = {key: value
-            for key, value in encoded_dict.items()
-            if key >= limit }
-        self.limit = limit
-
-    def calculate(self,
-        index : int, batch_size: int):
-        """Calculates Confusion Matrix With Ray"""
-        total_matching_pairs = 0
-        true_positives = 0
-
-
-        for i in range(index, batch_size + index):
-            _entity_d1 = self._get_concat_bloom_filter(i)
-            matching_pairs, positives = self._calculate_total(
-                        _entity_d1,
-                        i)
-            total_matching_pairs += matching_pairs
-            true_positives += positives
-
-        return total_matching_pairs, true_positives
-
-
-    def _calculate_total(self,
-        _entity_d1: set,
-        index: int):
-
-        total_matching_pairs = 0
-        true_positives = 0
-
-        for index_d2 in self._entities_d2:
-            _entity_d2 = self._get_concat_bloom_filter(index_d2)
-
-            matching = (index, index_d2-self.limit) in self.ground_truth
-
-            matching_pairs, true_positive = self._calculate_one(
-                    _entity_d1, _entity_d2, matching
-            )
-            total_matching_pairs += matching_pairs
-            true_positives += true_positive
-
-        return total_matching_pairs, true_positives
-
-    def _calculate_one(self,
-        _entity_d1: set,
-        _entity_d2: set,
-        matching: bool) -> tuple:
-
-        total_matching_pairs = 0
-        true_positive = 0
-        for bit in range((self.total_length +
-                          self.adjacent_bits - 1) //  self.adjacent_bits):
-            adj_list = [(i + bit * self.adjacent_bits) for i in self.adjacent_list]
-            cont_a = [i for i in adj_list if i in _entity_d1]
-            cont_b = [i for i in adj_list if i in _entity_d2]
-            if len(cont_b) == 0 or len(cont_a) == 0:
-                continue
-            if cont_a == cont_b:
-                total_matching_pairs += 1
-                if matching and not true_positive:
-                    true_positive += 1
-
-        return total_matching_pairs, true_positive
 
 
 class BloomEncodedData(EncodedData, PPRLFeature):
@@ -426,11 +318,8 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
 
 
-        switch = self.bounds[0] < self.bounds[1] - self.bounds[0]
-
-
         total_matching_pairs, true_positives = self._get_matching_pairs_loop(
-            bloom_filter_matrix, switch, adjacent_bits,
+            bloom_filter_matrix, adjacent_bits,
             ground_truth_list)
 
 
@@ -444,99 +333,88 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         return eval_result
 
     def _get_matching_pairs_loop(self, bloom_filter_matrix: np.array,
-                            switch: bool, adjacent_bits: int, ground_truth_list):
+                            adjacent_bits: int, ground_truth_list):
 
-        BATCH_SIZE = 1_000
+        BATCH_SIZE = 5_000
 
         total_matching_pairs = 0
         true_positives = 0
-
-        first_loop_range = range(0, self.bounds[0], BATCH_SIZE) if not switch \
-            else range(self.bounds[0], self.bounds[1], BATCH_SIZE)
-
-
-        second_loop_range =  range(self.bounds[0], self.bounds[1]) if not switch \
-            else range(self.bounds[0])
 
         entity_1 : np.array = bloom_filter_matrix[0]
         n_slices = len(entity_1) // adjacent_bits
         limit = n_slices * adjacent_bits
 
-
-        total_matching_pairs = 0
-        true_positives = 0
-
-        sliced_2 = np.stack([
-            bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
-            for i in second_loop_range
-        ]
-        )
-
-        sliced_2 = sliced_2[None, :, :, :]
-
-        remaining_2 = np.stack([
-            bloom_filter_matrix[i][limit:]
-            for i in second_loop_range
-        ])
-
-        remaining_2 = remaining_2[None, :, :]
-
         ground_truth_array = np.array(ground_truth_list).T
 
-
-        offset = 0
-        if switch:
-            ground_truth_array[[0,1]] = ground_truth_array[[1,0]]
-            offset = self.bounds[0]
-
-
-
-        for start_batch in first_loop_range:
-            end_batch = start_batch + BATCH_SIZE
-
-
-            if switch and end_batch > self.bounds[1]:
-                end_batch = self.bounds[1]
-            elif not switch and end_batch > self.bounds[0]:
-                end_batch = self.bounds[0]
-
-            ground_truth_batch = ground_truth_array[:,
-                        ground_truth_array[0]  >= start_batch - offset]
-
-
-            ground_truth_batch = ground_truth_batch[:,
-                        ground_truth_batch[0] < end_batch - offset]
-
+        for off_1, start_1 in enumerate(range(0, self.bounds[0], BATCH_SIZE)):
+            end_1 = start_1 + BATCH_SIZE \
+                if start_1 + BATCH_SIZE < self.bounds[0] \
+                else self.bounds[0]
+            ground_truth_batch_1 = ground_truth_array[:,
+                        ground_truth_array[0]  >= start_1]
+            ground_truth_batch_1 = ground_truth_batch_1[:,
+                        ground_truth_batch_1[0] < end_1]
 
             sliced_1 = np.stack([
                 bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
-                for i in range(start_batch, end_batch)
-            ])
+                for i in range(start_1, end_1)
+                ]
+            )
 
             sliced_1 = sliced_1[:, None, :, :]
 
+
             remaining_1 = np.stack([
                 bloom_filter_matrix[i][limit:]
-                for i in range(start_batch, end_batch)
+                for i in range(start_1, end_1)
             ])
+            remaining_1 = remaining_1[:, None, :]
+
+            for off_2, start_2 in enumerate(range(self.bounds[0],
+                                    self.bounds[1], BATCH_SIZE)):
+                end_2 = start_2 + BATCH_SIZE \
+                    if start_2 + BATCH_SIZE < self.bounds[1] \
+                    else self.bounds[1]
 
 
-            valid_matches = np.all(sliced_1 == sliced_2, axis=3) & sliced_1.any(axis=3)
+                ground_truth_batch_2 = ground_truth_batch_1[:,
+                            ground_truth_batch_1[1]  >= start_2 - self.bounds[0]]
+
+                ground_truth_batch_2 = ground_truth_batch_2[:,
+                            ground_truth_batch_2[1] < end_2 - self.bounds[0]]
 
 
-            if remaining_1.size > 0:
-                remaining_1 = remaining_1[:, None, :]
-                remaing_valid_matches = np.all(remaining_1 == remaining_2, axis=2) & remaining_1.any(axis=2)
+                sliced_2 = np.stack([
+                    bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
+                    for i in range(start_2, end_2)
+                ])
 
-                remaing_valid_matches = remaing_valid_matches[..., np.newaxis]  # shape (2, 3, 1)
-                valid_matches = np.concatenate((valid_matches, remaing_valid_matches), axis=2)
+                sliced_2 = sliced_2[None, :, :, :]
+
+                remaining_2 = np.stack([
+                    bloom_filter_matrix[i][limit:]
+                    for i in range(start_2, end_2)
+                ])
+
+                remaining_2 = remaining_2[None, :, :]
+
+                valid_matches = np.all(sliced_1 == sliced_2, axis=3) & sliced_1.any(axis=3)
+
+                if remaining_1.size > 0:
+                    remaing_valid_matches = np.all(remaining_1 == remaining_2, axis=2) & \
+                        remaining_1.any(axis=2)
+
+                    remaing_valid_matches = remaing_valid_matches[..., np.newaxis]  #shape (2, 3, 1)
+                    valid_matches = np.concatenate((valid_matches, remaing_valid_matches), axis=2)
 
 
-            matching_pairs = np.count_nonzero(valid_matches, axis=2)
-            total_matching_pairs += np.sum(matching_pairs)
+                matching_pairs = np.count_nonzero(valid_matches, axis=2)
+                total_matching_pairs += np.sum(matching_pairs)
 
-            true_pairs = matching_pairs[ground_truth_batch[0] - start_batch + offset, ground_truth_batch[1]]
-            true_positives += np.count_nonzero(true_pairs)
+                true_pairs = matching_pairs[ground_truth_batch_2[0] - off_1 * BATCH_SIZE,
+                                    ground_truth_batch_2[1] - off_2 * BATCH_SIZE
+                                    ]
+                true_positives += np.count_nonzero(true_pairs)
 
 
         return int(total_matching_pairs), int(true_positives)
