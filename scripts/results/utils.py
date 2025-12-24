@@ -32,11 +32,17 @@ def load_dataframe(path: str, files: tuple, sep: str):
     gt_index = gt_index.drop(columns=['id', 'D2'])
     gt_index.columns = ['D1', 'D2']
 
+
+    d1 = d1.astype(str)
+    d2 = d2.astype(str)
+
+
     return d1, d2, gt_index
 
 
 def config_bloom_filter(attributes,
-        size, qgrams, bloom_name, loaded_dataframe):
+        size, qgrams, bloom_name,
+        loaded_dataframe, adjacent_config: dict):
     """BF Gerator Method"""
 
     for a, s, q in product(attributes, size, qgrams):
@@ -50,6 +56,19 @@ def config_bloom_filter(attributes,
                 'salt': '',
                 'qgrams': q
             }
+
+            flag_all_found: bool = True
+            for key in adjacent_config:
+                if not configuration in adjacent_config[key]:
+                    flag_all_found = False
+                    break
+
+
+            if flag_all_found and adjacent_config:
+                yield None, None
+                continue
+
+
 
             config = BloomFilterConfig(**configuration)
             bl = BloomFilter(config)
