@@ -1,6 +1,6 @@
 """PPRL Encoders Class"""
 from dataclasses import dataclass
-from typing import List, Literal, Dict, Set, Optional
+from typing import List, Literal, Dict, Set, Optional, Union
 import re
 import hashlib
 import pandas as pd
@@ -35,6 +35,9 @@ class BloomFilter:
         "salted_skipqgrams", "salted_metaphone",
         "salted_tokens"
     ]
+
+
+    TOKEN_SPLIT_RE = re.compile(r'[\W_]+')
 
     def __init__(self, config: BloomFilterConfig):
         """
@@ -82,34 +85,31 @@ class BloomFilter:
         }
         return encoder_dict[self.hashing_type]()
 
-    def _create_bloom_dict_for_row(self, row : pd.Series) -> Dict[str, List[int]]:
+    def _create_bloom_dict_for_row(self, row : tuple) -> Dict[str, List[int]]:
         bloom_dict = {}
         if self.attributes:
             for attribute in self.attributes:
-                bloom_dict[attribute] = self.hash(str(row[attribute]))
+                bloom_dict[attribute] = self.hash(getattr(row,attribute))
         else:
-            flatten_row : list = row.values.tolist()
-            flatten_row = " ".join(str(x) for x in flatten_row)
+            row_values : list = [value for value in row]
+            flatten_row = " ".join(str(x) for x in row_values)
             bloom_dict['row'] = self.hash(flatten_row)
         return bloom_dict
 
 
     def _encode(self, df: pd.DataFrame) -> BloomEncodedData:
         bloom_dict = {}
-        for i, (_, row) in tqdm(enumerate(df.iterrows()), desc='Encoding Data'):
+        total_length = len(df)
+        for i, row in tqdm(enumerate(df.itertuples(index=False)),
+                        total=total_length, desc='Encoding Data'):
             bloom_dict[i] = self._create_bloom_dict_for_row(row)
         return BloomEncodedData(data = bloom_dict, length=self.size + self.offset, )  #leng
 
-    def _hash_token(self, bf: Set[int],  token: str, hash_token : bool = True):
-        # HASH STRING or HASH QGRAM
-
-        # HASH STRING here
-
-        if isinstance(bf, list):
-            bf = set(bf)
+    def _hash_token(self, bf: Set[int],  token: Union[str, bytes], hash_token : bool = True):
 
         if hash_token:
-            hashed = hashlib.sha256(token).digest()
+            token_bytes: bytes = token if isinstance(token, bytes) else b'0'
+            hashed = hashlib.sha256(token_bytes).digest()
             for i in range(self.num_hashes):
                 start_idx = i * 4 % (len(hashed) - 4)
                 segment = hashed[start_idx:start_idx + 4]
@@ -126,12 +126,10 @@ class BloomFilter:
                     position = (int.from_bytes(hashed, "little") % self.size) + self.offset
                     bf.add(position)
 
-        return [*bf]
+        return bf
 
 
     def _salted_string(self, str_to_enc: str) -> List[int]:
-        # bf = Bloom(capacity=self.size, error_rate=self.error_rate)
-
         bf = set()
         for i in range(self.num_hashes):
             salted_string = (str_to_enc + str(i) +  self.salt).encode("utf-8")
@@ -144,7 +142,6 @@ class BloomFilter:
         split = [f"_{word}_" for word in tokens if word]
         bf = set()
         for token in split:
-            # salted_string = (self.salt + str(i) +  str_to_enc).encode("utf-8")
             bf = self._hash_token(bf, token, False)                   # HASH QGRAM
 
         return [*bf]
@@ -207,8 +204,7 @@ class BloomFilter:
 
 
     def  _tokenize(self, str_to_enc : str) -> List:
-        return list(set(filter(None, re.split('[\\W_]', str_to_enc.lower()))))
-
+        return list(set(filter(None, self.TOKEN_SPLIT_RE.split(str_to_enc.lower()))))
 
 
     def encode(self, df: pd.DataFrame) -> BloomEncodedData:
