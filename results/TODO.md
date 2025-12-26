@@ -15,4 +15,4 @@
 - [x] D4 Finished 19/12 12:00  @pyravlos3
 - [x] D8 Finished 24/12 2:00 @pyravlos5
 - [x] D9 Finished 24/12 2:00 @pyravlos1
-- [x] D10 Pending 24/12 17:30 @pyravlos1
+- [x] D10 Pending 26/12 17:30 @pyravlos5
