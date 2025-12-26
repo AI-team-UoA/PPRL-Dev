@@ -36,36 +36,19 @@ if __name__ == '__main__':
     PATH = f"data/ccer/{DIR}"
     FILE = 'imdbclean'
     FILE2 = 'dbpediaclean'
-
-
-    # DIR = "D9"
-    # PATH = f"data/ccer/{DIR}"
-    # FILE = 'dblpclean'
-    # FILE2 = 'scholarclean'
-
-    # SEP = '>'
-    # attributes = [['title']]
+    attributes = [['title', 'starring']]
 
 
     SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
-    attributes = [['title', 'starring']]
-
 
     size = [64, 128, 256, 512]
     qgrams = [2,3,4]
-    TOTAL_LENGTH = 128 # TOTAL 266
-    MAX_CONCURRENT = 30
+    TOTAL_LENGTH = 128
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
 
     print(f"Runing experiments for {DIR}")
-
-    if not ray.is_initialized():
-        logging.getLogger("ray").setLevel(logging.ERROR)
-        ray.init(log_to_driver=False, logging_level=logging.ERROR)
-
-    futures = []
 
 
     adjacent_config = {}
@@ -78,7 +61,14 @@ if __name__ == '__main__':
     #     adjacent_config[adjacent_bits] = config_list
 
 
-    MAX_CONCURRENT = 18
+    futures = []
+    MAX_CONCURRENT = 15
+    if not ray.is_initialized():
+        logging.getLogger("ray").setLevel(logging.ERROR)
+        ray.init(log_to_driver=False, logging_level=logging.ERROR)
+
+    futures = []
+
 
     for configuration, new_bloom in tqdm(
         config_bloom_filter(attributes, size, qgrams,
@@ -86,11 +76,11 @@ if __name__ == '__main__':
         total=TOTAL_LENGTH):
 
 
+
         if configuration is None and new_bloom is None:
             continue
 
         for adjacent_bits in [1,2,4,8,10,12]:
-
             if adjacent_config \
                 and configuration in adjacent_config[adjacent_bits]:
                 continue
@@ -99,9 +89,8 @@ if __name__ == '__main__':
                                 adjacent_bits, configuration)
             futures.append(future)
 
-
             if len(futures) >= MAX_CONCURRENT:
-                finished, futures = ray.wait(futures, num_returns=6)
+                finished, futures = ray.wait(futures, num_returns=1)
                 for done in finished:
                     adj_bit, bloom_evaluation = ray.get(done)
                     FILENAME = f"blocking_encoder_{adj_bit}.csv"
@@ -121,15 +110,6 @@ if __name__ == '__main__':
             df = pd.DataFrame([bloom_evaluation])
             df.to_csv(f'{RESULTS}/{FILENAME}',
             mode='a+', index=False, header=not LOADED)
-
-
-
-
-    #     for adjacent_bits in [1,2,4,8,10,12]:
-    #         if len(futures) == MAX_CONCURRENT:
-    #             done, futures = ray.wait(futures, num_returns=1)
-    #             adj_bit, bloom_evaluation = ray.get(done[0])
-
 
 
     print(f"Finished experiments for {DIR}")

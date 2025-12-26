@@ -335,86 +335,48 @@ class BloomEncodedData(EncodedData, PPRLFeature):
     def _get_matching_pairs_loop(self, bloom_filter_matrix: np.array,
                             adjacent_bits: int, ground_truth_list):
 
-        BATCH_SIZE = 5_000
 
         total_matching_pairs = 0
-        true_positives = 0
+
 
         entity_1 : np.array = bloom_filter_matrix[0]
-        n_slices = len(entity_1) // adjacent_bits
-        limit = n_slices * adjacent_bits
 
-        ground_truth_array = np.array(ground_truth_list).T
-
-        for off_1, start_1 in enumerate(range(0, self.bounds[0], BATCH_SIZE)):
-            end_1 = start_1 + BATCH_SIZE \
-                if start_1 + BATCH_SIZE < self.bounds[0] \
-                else self.bounds[0]
-            ground_truth_batch_1 = ground_truth_array[:,
-                        ground_truth_array[0]  >= start_1]
-            ground_truth_batch_1 = ground_truth_batch_1[:,
-                        ground_truth_batch_1[0] < end_1]
-
-            sliced_1 = np.stack([
-                bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
-                for i in range(start_1, end_1)
-                ]
-            )
-
-            sliced_1 = sliced_1[:, None, :, :]
+        true_positives = len(ground_truth_list)
+        ground_truth_array = np.array(ground_truth_list)
+        ground_truth_array = np.ascontiguousarray(ground_truth_array)
+        len_entity_1 = len(entity_1)
 
 
-            remaining_1 = np.stack([
-                bloom_filter_matrix[i][limit:]
-                for i in range(start_1, end_1)
-            ])
-            remaining_1 = remaining_1[:, None, :]
-
-            for off_2, start_2 in enumerate(range(self.bounds[0],
-                                    self.bounds[1], BATCH_SIZE)):
-                end_2 = start_2 + BATCH_SIZE \
-                    if start_2 + BATCH_SIZE < self.bounds[1] \
-                    else self.bounds[1]
-
-
-                ground_truth_batch_2 = ground_truth_batch_1[:,
-                            ground_truth_batch_1[1]  >= start_2 - self.bounds[0]]
-
-                ground_truth_batch_2 = ground_truth_batch_2[:,
-                            ground_truth_batch_2[1] < end_2 - self.bounds[0]]
+        for start_bit in range(0, len_entity_1, adjacent_bits):
+            end_bit = min(start_bit + adjacent_bits, len_entity_1)
+            enitities_1 = bloom_filter_matrix[0:self.bounds[0], None, start_bit:end_bit]
+            masked_1 = enitities_1.any(axis=-1)
+            enitities_2 = bloom_filter_matrix[None, self.bounds[0]:self.bounds[1],
+                            start_bit:end_bit]
+            equal_entities = ~np.any(enitities_1 != enitities_2, axis = -1) & masked_1
+            total_matching_pairs += np.count_nonzero(equal_entities)
+            if ground_truth_array.size > 0:
+                pairs_sliced = np.argwhere(equal_entities)
+                # Create mask of ground_truth pairs that are NOT matched
+                pairs_sliced = np.ascontiguousarray(pairs_sliced)
 
 
-                sliced_2 = np.stack([
-                    bloom_filter_matrix[i][:limit].reshape(-1, adjacent_bits)
-                    for i in range(start_2, end_2)
-                ])
+                mask = ~np.isin(
+                    ground_truth_array.view([('', ground_truth_array.dtype)] * 2),
+                    pairs_sliced.view([('', pairs_sliced.dtype)] * 2)
+                ).ravel()
 
-                sliced_2 = sliced_2[None, :, :, :]
+                ground_truth_array = ground_truth_array[mask]
+                # is_in = np.isin(pairs_sliced, ground_truth_array)
+                # pairs_sliced = pairs_sliced[is_in]
+                # mask = ~np.any(
+                #     (ground_truth_array[:, None, :] == pairs_sliced[None, :, :]).all(axis=2),
+                #     axis=1
+                # )
+                # ground_truth_array = ground_truth_array[mask]
 
-                remaining_2 = np.stack([
-                    bloom_filter_matrix[i][limit:]
-                    for i in range(start_2, end_2)
-                ])
+        true_positives -= len(ground_truth_array)
 
-                remaining_2 = remaining_2[None, :, :]
-
-                valid_matches = np.all(sliced_1 == sliced_2, axis=3) & sliced_1.any(axis=3)
-
-                if remaining_1.size > 0:
-                    remaing_valid_matches = np.all(remaining_1 == remaining_2, axis=2) & \
-                        remaining_1.any(axis=2)
-
-                    remaing_valid_matches = remaing_valid_matches[..., np.newaxis]  #shape (2, 3, 1)
-                    valid_matches = np.concatenate((valid_matches, remaing_valid_matches), axis=2)
-
-
-                matching_pairs = np.count_nonzero(valid_matches, axis=2)
-                total_matching_pairs += np.sum(matching_pairs)
-
-                true_pairs = matching_pairs[ground_truth_batch_2[0] - off_1 * BATCH_SIZE,
-                                    ground_truth_batch_2[1] - off_2 * BATCH_SIZE
-                                    ]
-                true_positives += np.count_nonzero(true_pairs)
 
 
         return int(total_matching_pairs), int(true_positives)
