@@ -5,9 +5,11 @@ from typing import Dict, List, Tuple
 from collections import defaultdict
 import itertools
 import logging
+import datetime
 
 import pandas as pd
 import ray
+
 
 from bitarray import bitarray
 import numpy as np
@@ -337,14 +339,48 @@ class BloomEncodedData(EncodedData, PPRLFeature):
 
 
         total_matching_pairs = 0
-
-
+        BATCH_SIZE = 2_000
         entity_1 : np.array = bloom_filter_matrix[0]
-
         true_positives = len(ground_truth_list)
         ground_truth_array = np.array(ground_truth_list)
         ground_truth_array = np.ascontiguousarray(ground_truth_array)
         len_entity_1 = len(entity_1)
+
+        if adjacent_bits <= 8:
+            for start_1 in range(0, self.bounds[0], BATCH_SIZE):
+                print(f'{start_1}/{self.bounds[0]} {datetime.datetime.now()}')
+                end_1 = min(start_1 +  BATCH_SIZE, self.bounds[0])
+                n_slices = len_entity_1 // adjacent_bits
+                entities_1 = bloom_filter_matrix[start_1:end_1]. \
+                    reshape(start_1-end_1, n_slices, adjacent_bits)
+
+                entities_1_int = np.packbits(entities_1, axis=-1, bitorder='little').squeeze(-1)
+                entities_1_int = entities_1_int[:, None, :]
+
+                for start_2 in range(self.bounds[0], self.bounds[1], BATCH_SIZE):
+                    end_2 = min(start_2 + BATCH_SIZE, self.bounds[1])
+                    entities_2 = bloom_filter_matrix[start_2:end_2].reshape(end_2 - start_2,
+                                                    n_slices, adjacent_bits)
+                    entities_2_int = np.packbits(entities_2, axis=-1, bitorder='little').squeeze(-1)
+                    equal_entities = (entities_1_int != 0) & (entities_1_int == entities_2_int)
+                    pairs_entities = np.count_nonzero(equal_entities, axis=-1)
+                    total_matching_pairs += np.count_nonzero(equal_entities)
+
+                    if ground_truth_array.size > 0:
+                        pairs_sliced = np.argwhere(pairs_entities)
+                        pairs_sliced = np.ascontiguousarray(pairs_sliced)
+                        pairs_sliced[:,0] += start_1
+                        pairs_sliced[:,1] += start_2 - self.bounds[0]
+
+                        mask = ~np.isin(
+                            ground_truth_array.view([('', ground_truth_array.dtype)] * 2),
+                            pairs_sliced.view([('', pairs_sliced.dtype)] * 2)
+                        ).ravel()
+
+                        ground_truth_array = ground_truth_array[mask]
+            true_positives -= len(ground_truth_array)
+            return int(total_matching_pairs), int(true_positives)
+
 
 
         for start_bit in range(0, len_entity_1, adjacent_bits):
@@ -360,23 +396,14 @@ class BloomEncodedData(EncodedData, PPRLFeature):
                 # Create mask of ground_truth pairs that are NOT matched
                 pairs_sliced = np.ascontiguousarray(pairs_sliced)
 
-
                 mask = ~np.isin(
                     ground_truth_array.view([('', ground_truth_array.dtype)] * 2),
                     pairs_sliced.view([('', pairs_sliced.dtype)] * 2)
                 ).ravel()
 
                 ground_truth_array = ground_truth_array[mask]
-                # is_in = np.isin(pairs_sliced, ground_truth_array)
-                # pairs_sliced = pairs_sliced[is_in]
-                # mask = ~np.any(
-                #     (ground_truth_array[:, None, :] == pairs_sliced[None, :, :]).all(axis=2),
-                #     axis=1
-                # )
-                # ground_truth_array = ground_truth_array[mask]
 
         true_positives -= len(ground_truth_array)
-
 
 
         return int(total_matching_pairs), int(true_positives)
