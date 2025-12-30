@@ -127,3 +127,7 @@ Encoder,0,0.0,100.0,0.0,22148,32659751987,27415,0,"{'attributes': ['title', 'sta
 Encoder,0,0.0,100.0,0.0,22148,36936799070,27415,0,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 14, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
 Encoder,0,0.0,100.0,0.0,22148,41401403626,27415,0,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 15, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
 Encoder,0,0.0,100.0,0.0,22148,46000198989,27415,0,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 16, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Encoder,0,0.0,99.99,0.0,22145,5813843999,27412,3,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
+Encoder,0,0.0,100.0,0.0,22148,13245317852,27415,0,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
+Encoder,0,0.0,99.82,0.0,22108,4354264953,27375,40,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
+Encoder,0,0.0,98.45,0.0,21804,2930943283,27071,344,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
