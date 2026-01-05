@@ -237,10 +237,38 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         return candidate_pairs
 
 
+    def calculate_average_active_bits(self) -> float:
+        """Calculate average active bits"""
+
+        total_length = len(self.attributes) * self.length
+        num_of_entities = self.bounds[1]
+
+        print(f"Number_of_ entities {num_of_entities}")
+
+        bloom_filter_matrix = np.zeros(
+            (num_of_entities, total_length),
+            dtype=bool)
+
+        for entity_id, fields in self.encoded_dict.items():
+            for i, bloom_filter_indices in enumerate(fields.values()):
+                offset = i * self.length
+                if bloom_filter_indices:
+                    bloom_filter_matrix[entity_id,
+                        np.array(bloom_filter_indices) + offset]  = True
+
+        print(f"Bloom Filter created")
+
+        active_bits = 0
+
+        for start in (0, num_of_entities, 5_000):
+            end = min(start + 5_000, num_of_entities)
+            active_bits += np.count_nonzero(bloom_filter_matrix[start:end])
 
 
+        return int(active_bits)/(total_length * self.bounds[1])
 
-    def get_candidate_pairs(self, adjacent_bits: int = 1) -> list:
+
+    def calculate_distinct_candidate_pairs(self, adjacent_bits: int = 1) -> int:
         """
         Function that produces candidate pairs based on blocking of adjacent bits
         Uses Ray
@@ -251,28 +279,65 @@ class BloomEncodedData(EncodedData, PPRLFeature):
             list: All the candidate pairs
 
         """
+        total_length = len(self.attributes) * self.length
 
 
-        if not ray.is_initialized():
-            logging.getLogger("ray").setLevel(logging.ERROR)
-            ray.init(log_to_driver=False, logging_level=logging.ERROR)
+        bloom_filter_length = self.bounds[1]
+        bloom_filter_matrix = np.zeros(
+            (bloom_filter_length, total_length),
+            dtype=bool)
 
-        self_ref = ray.put(self)
-        futures = []
 
-        for i in range(self.bounds[0]):
-            future = self._ray_get_candidate_pairs.remote(self_ref,
-                index=i,
-                adjacent_bits = adjacent_bits,
-            )
-            futures.append(future)
 
-        results = ray.get(futures)
-        candidate_pairs = []
-        for pairs in results:
-            candidate_pairs.extend(pairs)
+        rows = []
+        cols = []
+        for entity_id, fields in self.encoded_dict.items():
+            for i, bloom_filter_indices in enumerate(fields.values()):
+                if bloom_filter_indices:
+                    offset = i * self.length
+                    rows.extend([entity_id] * len(bloom_filter_indices))
+                    cols.extend([idx + offset for idx in bloom_filter_indices])
 
-        return candidate_pairs
+        if rows:
+            bloom_filter_matrix[rows, cols] = True
+
+        entities_1 = bloom_filter_matrix[:self.bounds[0]]
+        entities_2 = bloom_filter_matrix[self.bounds[0]:self.bounds[1]]
+        found_pairs = np.zeros((entities_1.shape[0], entities_2.shape[0]), dtype=bool)
+
+
+        for start_bit in range(0, total_length, adjacent_bits):
+            end_bit = min(start_bit + adjacent_bits, total_length)
+            block_1 = entities_1[:, start_bit:end_bit]
+            block_2 = entities_2[:, start_bit:end_bit]
+            # 1. Ensure Contiguity: Required for viewing as void
+            if not block_1.flags['C_CONTIGUOUS']:
+                block_1 = np.ascontiguousarray(block_1)
+            if not block_2.flags['C_CONTIGUOUS']:
+                block_2 = np.ascontiguousarray(block_2)
+
+            # 2. The View Trick: Treat the entire row of bits as a single binary 'blob'
+            # This collapses the last dimension.
+            # Comparison becomes (N_a, 1) == (1, N_b) instead of (N_a, N_b, bits)
+            void_dtype = np.dtype((np.void, block_1.shape[1] * block_1.itemsize))
+            view_1 = block_1.view(void_dtype).ravel()
+            view_2 = block_2.view(void_dtype).ravel()
+
+            # 3. Mask: Condition implies entity A must have at least one bit set (masked_1)
+            # If A matches B and A is not zero, then B is naturally not zero.
+            valid_1 = block_1.any(axis=1)
+
+            # 4. Broadcast Comparison
+            # Logic: (A_signature == B_signature) AND (A is not empty)
+            matches = (view_1[:, None] == view_2[None, :]) & valid_1[:, None]
+
+            # Accumulate results using Logical OR
+            found_pairs |= matches
+            # Optimization 3: Early Exit
+            if found_pairs.all():
+                break
+
+        return np.count_nonzero(found_pairs)
 
 
     def serial_evaluate(self,

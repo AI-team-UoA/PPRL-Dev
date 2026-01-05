@@ -42,9 +42,9 @@ if __name__ == '__main__':
     SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
 
-    size = [64, 128, 256, 512]
+    size = [32]
     qgrams = [2,3,4]
-    TOTAL_LENGTH = 128
+    TOTAL_LENGTH = 4
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
 
@@ -52,13 +52,13 @@ if __name__ == '__main__':
 
 
     adjacent_config = {}
-    # for adjacent_bits in [1,2,4,8,10,12]:
+    for adjacent_bits in [1,2,4,8,10,12]:
 
-    #     FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
-    #     df  = pd.read_csv(f'{RESULTS}/{FILENAME}')
-    #     df['config'] = df['config'].apply(ast.literal_eval)
-    #     config_list = df['config'].to_list()
-    #     adjacent_config[adjacent_bits] = config_list
+        FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
+        df  = pd.read_csv(f'{RESULTS}/{FILENAME}')
+        df['config'] = df['config'].apply(ast.literal_eval)
+        config_list = df['config'].to_list()
+        adjacent_config[adjacent_bits] = config_list
 
 
     futures = []

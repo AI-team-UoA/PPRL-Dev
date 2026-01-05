@@ -135,3 +135,17 @@ def evaluate_encoder_ray(new_bloom: BloomEncodedData,
 
 
     return adjacent_bits, my_ev
+
+
+
+@ray.remote
+def distinct_candidate_pairs_ray(new_bloom: BloomEncodedData,
+            adjacent_bits: int, index: int):
+    """Experiments for comparison Cleaning"""
+
+    distinct_candidate_pairs = new_bloom. \
+                    calculate_distinct_candidate_pairs(adjacent_bits)
+
+
+
+    return adjacent_bits, distinct_candidate_pairs, index

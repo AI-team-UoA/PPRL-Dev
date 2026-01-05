@@ -2,11 +2,12 @@
 
 ## Dataset
 
-- D3 {Amazon-Gp}
-- D4 {DBLP - ACM}
-- D8 {Walmart - Amazon}
-- D9 {DBLP - Scholar}
-- D10 {IMDB - DBpedia}
+- D2 {ABT - BUY}    [abtclean, buyclean, name, |]
+- D3 {Amazon-Gp}    [amazonclean, gpclean, title, #]
+- D4 {DBLP - ACM}   [dblpclean, acmclean, title, %]
+- D8 {Walmart - Amazon} [walmartclean, amazonclean, title, |]
+- D9 {DBLP - Scholar} [dblpclean, scholarclean, title, >]
+- D10 {IMDB - DBpedia} [imdbclean, dbpediaclean, title,starring, ]
 
 ## Blocking
 
@@ -15,4 +16,12 @@
 - [x] D4 Finished 19/12 12:00  @pyravlos3
 - [x] D8 Finished 24/12 2:00 @pyravlos5
 - [x] D9 Finished 24/12 2:00 @pyravlos1
-- [x] D10 Pending 26/12 17:30 @pyravlos5 @pyravlos1
+- [x] D10 Finished 26/12 17:30 @pyravlos5 @pyravlos1
+
+## Candidate pairs and AVG Active Bits
+- [x] D2 Finished
+- [x] D3 Finished
+- [x] D4 Finished
+- [ ] D8  
+- [x] D9 Pending 4/1
+- [ ] D10 
