@@ -11,10 +11,10 @@ from utils import load_dataframe, distinct_candidate_pairs_ray, config_bloom_fil
 
 if __name__ == '__main__':
 
-    DIR = "D9"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'scholarclean'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
     attributes = [['title']]
 
     # DIR = "D2"
@@ -23,7 +23,7 @@ if __name__ == '__main__':
     # FILE2 = 'buyclean'
     # attributes = [['name']]
 
-    SEP = ">"
+    SEP = "|"
 
     RESULTS = f"results/blocking/{DIR}"
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
@@ -53,7 +53,7 @@ if __name__ == '__main__':
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
 
-    CANDIDATES_PAIRS = None if DIR not in ['D8', 'D9', 'D10'] else {}
+    CANDIDATES_PAIRS = None if DIR not in ['D2', 'D8', 'D9', 'D10'] else {}
     active_bits = []
 
 
@@ -80,13 +80,13 @@ if __name__ == '__main__':
                             adjacent_bits, index)
                 futures.append(future)
 
-        if len(futures) >= MAX_CONCURRENCY:
-            finished, futures = ray.wait(futures, num_returns = 1)
-            for done in finished:
-                adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
-                if adj_bit not in CANDIDATES_PAIRS:
-                    CANDIDATES_PAIRS[adj_bit] = []
-                CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
+            if len(futures) >= MAX_CONCURRENCY:
+                finished, futures = ray.wait(futures, num_returns = 1)
+                for done in finished:
+                    adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
+                    if adj_bit not in CANDIDATES_PAIRS:
+                        CANDIDATES_PAIRS[adj_bit] = []
+                    CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
 
 
         active_bits_100 = new_bloom.calculate_average_active_bits() * 100
