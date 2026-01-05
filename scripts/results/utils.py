@@ -139,9 +139,14 @@ def evaluate_encoder_ray(new_bloom: BloomEncodedData,
 
 
 @ray.remote
-def distinct_candidate_pairs_ray(new_bloom: BloomEncodedData,
+def candidate_pairs_and_active_bits_ray(new_bloom: BloomEncodedData,
             adjacent_bits: int, index: int):
     """Experiments for comparison Cleaning"""
+    if adjacent_bits == -1:
+        active_bits_100 = new_bloom.calculate_average_active_bits() * 100
+        active_bits_100 = round(active_bits_100, 2)
+        return adjacent_bits, active_bits_100, index
+
 
     distinct_candidate_pairs = new_bloom. \
                     calculate_distinct_candidate_pairs(adjacent_bits)

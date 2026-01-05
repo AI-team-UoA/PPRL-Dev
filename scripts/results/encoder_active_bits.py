@@ -1,13 +1,13 @@
 import ast
 from tqdm.auto import tqdm
-
+from typing import Dict, List, Union
 import pandas as pd
 import ray
 import logging
 
 from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 
-from utils import load_dataframe, distinct_candidate_pairs_ray, config_bloom_filter, evaluate_encoder_ray
+from utils import load_dataframe, candidate_pairs_and_active_bits_ray, config_bloom_filter, evaluate_encoder_ray
 
 if __name__ == '__main__':
 
@@ -16,14 +16,9 @@ if __name__ == '__main__':
     FILE = 'dblpclean'
     FILE2 = 'scholarclean'
     attributes = [['title']]
-
-    # DIR = "D2"
-    # PATH = f"data/ccer/{DIR}"
-    # FILE = 'abtclean'
-    # FILE2 = 'buyclean'
-    # attributes = [['name']]
-
     SEP = ">"
+
+
 
     RESULTS = f"results/blocking/{DIR}"
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
@@ -53,11 +48,13 @@ if __name__ == '__main__':
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
 
-    CANDIDATES_PAIRS = None if DIR not in ['D8', 'D9', 'D10'] else {}
+    CANDIDATES_PAIRS : Union[None, Dict[int, List]] = None if DIR not in ['D2', 'D8', 'D9', 'D10'] else {}
     active_bits = []
 
 
-    MAX_CONCURRENCY = 30
+    MAX_CONCURRENCY = 24
+
+    futures = []
 
     for index, configuration in tqdm(
         enumerate(config_list), total=len(config_list)):
@@ -73,25 +70,19 @@ if __name__ == '__main__':
 
         new_bloom.set_ground_truth(loaded_dataframe[2])
         if CANDIDATES_PAIRS is not None:
-            futures = []
-
             for adjacent_bits in [1,2,4,8,10,12]:
-                future = distinct_candidate_pairs_ray.remote(new_bloom,
+                future = candidate_pairs_and_active_bits_ray.remote(new_bloom,
                             adjacent_bits, index)
                 futures.append(future)
 
-        if len(futures) >= MAX_CONCURRENCY:
-            finished, futures = ray.wait(futures, num_returns = 1)
-            for done in finished:
-                adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
-                if adj_bit not in CANDIDATES_PAIRS:
-                    CANDIDATES_PAIRS[adj_bit] = []
-                CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
+                if len(futures) >= MAX_CONCURRENCY:
+                    finished, futures = ray.wait(futures, num_returns = 1)
+                    for done in finished:
+                        adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
+                        if adj_bit not in CANDIDATES_PAIRS:
+                            CANDIDATES_PAIRS[adj_bit] = []
+                        CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
 
-
-        active_bits_100 = new_bloom.calculate_average_active_bits() * 100
-        active_bits_100 = round(active_bits_100, 2)
-        active_bits.append(active_bits_100)
 
     while futures:
         finished, futures = ray.wait(futures, num_returns = 1)
@@ -101,6 +92,7 @@ if __name__ == '__main__':
                 CANDIDATES_PAIRS[adj_bit] = []
             CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
 
+
     new_dict = {}
     for adj_bit, candidate_pair_list in CANDIDATES_PAIRS.items():
         sorted_list = [x[1] for x in sorted(candidate_pair_list,
@@ -108,6 +100,7 @@ if __name__ == '__main__':
         new_dict[adj_bit] = sorted_list
 
     CANDIDATES_PAIRS = new_dict
+    active_bits = CANDIDATES_PAIRS[-1]
 
     for adjacent_bits in [1, 2, 4, 8, 10, 12]:
         FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
