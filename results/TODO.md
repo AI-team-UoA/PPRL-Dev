@@ -22,6 +22,6 @@
 - [x] D2 Finished
 - [x] D3 Finished
 - [x] D4 Finished
-- [ ] D8  
-- [x] D9 Pending 4/1
-- [ ] D10 
+- [x] D8 Pending 5/1 @pyravlos5
+- [x] D9 Pending 4/1 @pyravlos1
+- [ ] D10
