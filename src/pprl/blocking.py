@@ -394,7 +394,7 @@ class FAISSBlocking(AbstractBlockBuilding):
     _method_info = "Faiss blocking."
 
 
-    def __init__(self, index_type: Literal['flat','hnsw'] = 'flat'):
+    def __init__(self, index_type: Literal['flat','hnsw','lsh'] = 'flat'):
         super().__init__()
         self.top_k: int
         self.encoded_data : BloomEncodedData
@@ -409,6 +409,10 @@ class FAISSBlocking(AbstractBlockBuilding):
         if 'hnsw' == self.index_type:
             self.index = faiss.IndexBinaryHNSW(vector_size, 32)
             self.index.metric_type = faiss.METRIC_Jaccard
+        elif 'lsh' == self.index_type:
+            lmbda : int = 8
+            psi = vector_size // lmbda
+            self.index = faiss.IndexBinaryMultiHash(vector_size, lmbda, psi)
         else:
             self.index = faiss.IndexBinaryFlat(vector_size)
 

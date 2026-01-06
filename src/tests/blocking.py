@@ -1,3 +1,5 @@
+"""Tests for blocking.py"""
+
 from unittest.mock import MagicMock
 
 from bitarray import bitarray
@@ -198,21 +200,34 @@ class TestFAISS:
         ev = blocker.evaluate(blocks)
         print(blocks)
         assert ev['F1 %'] == 100.0
-        
+
         blocker = FAISSBlocking('hnsw')
         mock_data = create_mock_encoded_data(length=24, attributes=['a', 'b'])
         blocks = blocker.build_blocks(encoded_data=mock_data, attributes=['a', 'b'], top_k=100)
         ev = blocker.evaluate(blocks)
         # assert blocks[0] == {3}
         assert ev['Recall %'] == 100.0
-        
+
         with pytest.raises(AttributeError):
             blocker.encoded_data.skip_ground_truth = True
             blocker.evaluate(blocks)
-        
+
         with pytest.raises(AttributeError):
             blocker.encoded_data = None
             blocker.evaluate(blocks)
 
+        blocker = FAISSBlocking('lsh')
+        mock_data = create_mock_encoded_data(length=24, attributes=['a', 'b'])
+        blocks = blocker.build_blocks(encoded_data=mock_data, attributes=['a', 'b'], top_k=100)
+        ev = blocker.evaluate(blocks)
+        # assert blocks[0] == {3}
+        assert ev['Recall %'] == 100.0
 
+        with pytest.raises(AttributeError):
+            blocker.encoded_data.skip_ground_truth = True
+            blocker.evaluate(blocks)
+
+        with pytest.raises(AttributeError):
+            blocker.encoded_data = None
+            blocker.evaluate(blocks)
 
