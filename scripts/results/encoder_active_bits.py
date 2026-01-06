@@ -11,12 +11,19 @@ from utils import load_dataframe, candidate_pairs_and_active_bits_ray, config_bl
 
 if __name__ == '__main__':
 
-    DIR = "D9"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'scholarclean'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
     attributes = [['title']]
-    SEP = ">"
+
+    # DIR = "D2"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'abtclean'
+    # FILE2 = 'buyclean'
+    # attributes = [['name']]
+
+    SEP = "|"
 
 
 
@@ -48,7 +55,7 @@ if __name__ == '__main__':
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
 
-    CANDIDATES_PAIRS : Union[None, Dict[int, List]] = None if DIR not in ['D2', 'D8', 'D9', 'D10'] else {}
+    CANDIDATES_PAIRS : Union[None, Dict[int, List]] = None if DIR not in ['D8', 'D9', 'D10'] else {}
     active_bits = []
 
 
@@ -83,9 +90,8 @@ if __name__ == '__main__':
                             CANDIDATES_PAIRS[adj_bit] = []
                         CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
         future = candidate_pairs_and_active_bits_ray.remote(new_bloom,
-                    0, index)
+                            0, index)
         futures.append(future)
-
 
     while futures:
         finished, futures = ray.wait(futures, num_returns = 1)
