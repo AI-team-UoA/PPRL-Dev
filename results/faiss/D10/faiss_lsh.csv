@@ -1,0 +1,11 @@
+name,candidate_pairs,top_k,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+FAISS LSH Blocking,23182,1,23.55,24.65,24.09,5460,17722,10727,16688,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,46364,2,13.59,28.46,18.4,6303,40061,11570,15845,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,69546,3,9.62,30.21,14.6,6692,62854,11959,15456,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,92728,4,7.46,31.25,12.05,6922,85806,12189,15226,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,115910,5,6.11,31.96,10.26,7079,108831,12346,15069,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,139092,6,5.18,32.56,8.94,7211,131881,12478,14937,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,162274,7,4.51,33.07,7.94,7325,154949,12592,14823,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,185456,8,4.0,33.48,7.14,7416,178040,12683,14732,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,208638,9,3.61,33.96,6.52,7522,201116,12789,14626,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS LSH Blocking,231820,10,3.29,34.41,6.0,7622,224198,12889,14526,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

@@ -1,0 +1,11 @@
+name,candidate_pairs,top_k,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+FAISS HNSW Blocking,23182,1,2.22,2.33,2.27,515,22667,5782,21633,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,46364,2,1.56,3.26,2.1,721,45643,5988,21427,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,69546,3,1.04,3.25,1.57,720,68826,5987,21428,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,92728,4,0.67,2.8,1.08,620,92108,5887,21528,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,115910,5,0.61,3.2,1.03,709,115201,5976,21439,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,139092,6,0.61,3.85,1.06,853,138239,6120,21295,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,162274,7,0.66,4.82,1.16,1068,161206,6335,21080,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,185456,8,0.39,3.23,0.69,716,184740,5983,21432,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,208638,9,0.35,3.34,0.64,739,207899,6006,21409,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+FAISS HNSW Blocking,231820,10,0.26,2.74,0.48,607,231213,5874,21541,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
