@@ -23,7 +23,7 @@
 - [x] D3 Finished
 - [x] D4 Finished
 - [x] D8 Finished 6/1 0:00 @pyravlos5
-- [ ] D9 Pending 6/1 0:00 @pyravlos5
+- [x] D9 Pending 6/1 0:00 @pyravlos5
 - [ ] D10
 
 
