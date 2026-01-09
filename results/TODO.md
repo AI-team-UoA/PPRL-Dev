@@ -23,8 +23,8 @@
 - [x] D3 Finished
 - [x] D4 Finished
 - [x] D8 Finished 6/1 0:00 @pyravlos5
-- [x] D9 Pending 6/1 0:00 @pyravlos5
-- [ ] D10
+- [x] D9 Finished 9/1 15:00 @pyravlos5
+- [x] D10 Pending 9/1 15:30 @pyravlos5
 
 
 ## FAISS FLAT HNSW and LSH for size 1024 and qgrams 4
