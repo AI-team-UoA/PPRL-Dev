@@ -42,9 +42,9 @@ if __name__ == '__main__':
     SEP = '|'
     RESULTS = f"results/blocking/{DIR}"
 
-    size = [32]
-    qgrams = [2,3,4]
-    TOTAL_LENGTH = 4
+    size = [512]
+    qgrams = [4]
+    TOTAL_LENGTH = 16
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
 
@@ -62,7 +62,7 @@ if __name__ == '__main__':
 
 
     futures = []
-    MAX_CONCURRENT = 15
+    MAX_CONCURRENT = 6
     if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
         ray.init(log_to_driver=False, logging_level=logging.ERROR)

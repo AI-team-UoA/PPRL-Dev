@@ -11,19 +11,19 @@ from utils import load_dataframe, candidate_pairs_and_active_bits_ray, config_bl
 
 if __name__ == '__main__':
 
-    # DIR = "D10"
-    # PATH = f"data/ccer/{DIR}"
-    # FILE = 'imdbclean'
-    # FILE2 = 'dbpediaclean'
-    # attributes = [['title', "starring"]]
-
-    DIR = "D9"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'scholarclean'
-    attributes = [['title']]
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
+    attributes = [['title', "starring"]]
+    SEP = "|"
 
-    SEP = ">"
+    # DIR = "D9"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'dblpclean'
+    # FILE2 = 'scholarclean'
+    # attributes = [['title']]
+
 
 
 
@@ -61,7 +61,7 @@ if __name__ == '__main__':
 
 
 
-    MAX_CONCURRENCY = 24
+    MAX_CONCURRENCY = 12
 
     futures = []
 
