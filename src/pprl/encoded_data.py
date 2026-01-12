@@ -256,16 +256,21 @@ class BloomEncodedData(EncodedData, PPRLFeature):
                     bloom_filter_matrix[entity_id,
                         np.array(bloom_filter_indices) + offset]  = True
 
-        print(f"Bloom Filter created")
+        print("Bloom Filter created")
 
-        active_bits = 0
+        # 4. Count Active Bits
+        # Corrected: No need to loop. Numpy is optimized for this.
+        active_bits = np.count_nonzero(bloom_filter_matrix)
 
-        for start in (0, num_of_entities, 5_000):
-            end = min(start + 5_000, num_of_entities)
-            active_bits += np.count_nonzero(bloom_filter_matrix[start:end])
+        # 5. Return Ratio
+        # This returns the density (0.0 to 1.0).
+        # If you wanted average bits per entity, remove the division by total_length.
+        total_possible_bits = total_length * num_of_entities
 
+        if total_possible_bits == 0:
+            return 0.0
 
-        return int(active_bits)/(total_length * self.bounds[1])
+        return int(active_bits) / int(total_possible_bits)
 
 
     def calculate_distinct_candidate_pairs(self, adjacent_bits: int = 1) -> int:

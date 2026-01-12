@@ -11,19 +11,19 @@ from utils import load_dataframe, candidate_pairs_and_active_bits_ray, config_bl
 
 if __name__ == '__main__':
 
-    DIR = "D8"
+    # DIR = "D10"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'imdbclean'
+    # FILE2 = 'dbpediaclean'
+    # attributes = [['title', "starring"]]
+
+    DIR = "D9"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
+    FILE = 'dblpclean'
+    FILE2 = 'scholarclean'
     attributes = [['title']]
 
-    # DIR = "D2"
-    # PATH = f"data/ccer/{DIR}"
-    # FILE = 'abtclean'
-    # FILE2 = 'buyclean'
-    # attributes = [['name']]
-
-    SEP = "|"
+    SEP = ">"
 
 
 
@@ -55,8 +55,10 @@ if __name__ == '__main__':
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
 
-    CANDIDATES_PAIRS : Union[None, Dict[int, List]] = None if DIR not in ['D8', 'D9', 'D10'] else {}
+    # CANDIDATES_PAIRS : Union[None, Dict[int, List]] = None if DIR not in ['D8', 'D9', 'D10'] else {}
+    CANDIDATES_PAIRS = None
     active_bits = []
+
 
 
     MAX_CONCURRENCY = 24
@@ -89,20 +91,38 @@ if __name__ == '__main__':
                         if adj_bit not in CANDIDATES_PAIRS:
                             CANDIDATES_PAIRS[adj_bit] = []
                         CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
+        else:
+            if len(futures) >= MAX_CONCURRENCY:
+                finished, futures = ray.wait(futures, num_returns = 1)
+                for done in finished:
+                    adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
+                    active_bits.append((pair_index, distinct_candidate_pairs))
+
         future = candidate_pairs_and_active_bits_ray.remote(new_bloom,
                             0, index)
         futures.append(future)
 
     while futures:
-        finished, futures = ray.wait(futures, num_returns = 1)
-        for done in finished:
-            adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
-            if adj_bit not in CANDIDATES_PAIRS:
-                CANDIDATES_PAIRS[adj_bit] = []
-            CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
+        if CANDIDATES_PAIRS is not None:
+            finished, futures = ray.wait(futures, num_returns = 1)
+            for done in finished:
+                adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
+                if adj_bit not in CANDIDATES_PAIRS:
+                    CANDIDATES_PAIRS[adj_bit] = []
+                CANDIDATES_PAIRS[adj_bit].append((pair_index, distinct_candidate_pairs))
+        else:
+            finished, futures = ray.wait(futures, num_returns = 1)
+            for done in finished:
+                adj_bit, distinct_candidate_pairs, pair_index = ray.get(done)
+                active_bits.append((pair_index, distinct_candidate_pairs))
 
 
     new_dict = {}
+    if CANDIDATES_PAIRS is None:
+        CANDIDATES_PAIRS = {}
+        CANDIDATES_PAIRS[0] = active_bits
+
+
     for adj_bit, candidate_pair_list in CANDIDATES_PAIRS.items():
         sorted_list = [x[1] for x in sorted(candidate_pair_list,
                                 key=lambda x: x[0])]
@@ -127,10 +147,10 @@ if __name__ == '__main__':
         )
 
         df['Average Bits %'] = active_bits
-        if CANDIDATES_PAIRS:
+        if adjacent_bits in CANDIDATES_PAIRS:
             df['candidate_pairs'] = CANDIDATES_PAIRS[adjacent_bits]
 
         df.drop(columns=['size', 'num_hashes', 'qgrams'], inplace=True)
 
         df.to_csv(f'{RESULTS}/{FILENAME}', index=False)
-
+    print(f"Adding Candidate Pairs and Active Bits for {DIR}")
