@@ -12,53 +12,77 @@ from pprl.comparison_cleaning import (
     WeightedNodePruning,
     CardinalityEdgePruning,
     CardinalityNodePruning,
-    BLAST,
 )
 
 
 if __name__ == '__main__':
 
-    DIR = "D2"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'abtclean'
-    FILE2 = 'buyclean'
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
     SEP = '|'
+    attributes = [['title', 'starring']]
+
+
     RESULTS = f"results/metablocking/{DIR}"
-    attributes = [['name']]
-    size = [64, 128, 256, 512, 1024]
-    qgrams = [2,3,4]
-    TOTAL_LENGTH = len(attributes) * len(size) * len(qgrams)
-
-
-
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
+    BLOOM_NAME = 'metablocking'
+    print(f"Running METABLOCKING for {DIR}")
+
+
+    size = [1024]
+    qgrams = [4]
+    TOTAL_LENGTH = 32
+
+    adjacent_config = {}
 
     if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
+    futures = []
+    MAX_CONCURRENCY = 24
+
 
     for configuration, new_bloom in tqdm(
-        config_bloom_filter(attributes, size, qgrams, 'metablocking', loaded_dataframe),
+        config_bloom_filter(attributes, size, qgrams,
+                BLOOM_NAME, loaded_dataframe, adjacent_config),
         total=TOTAL_LENGTH):
-        new_bloom_ref = ray.put(new_bloom)
-        configuration_ref = ray.put(configuration)
 
-        print(new_bloom.encoded_dict[0])
-        futures = []
         for CC in [ WeightedEdgePruning,
             WeightedNodePruning,
             CardinalityEdgePruning,
-            CardinalityNodePruning,
-            BLAST]:
+            CardinalityNodePruning]:
 
-            future = comparison_cleaning_exp.remote(CC, new_bloom_ref,
-                                                configuration_ref)
+            future = comparison_cleaning_exp.remote(CC, new_bloom,
+                                                configuration)
             futures.append(future)
 
+            if len(futures) >= MAX_CONCURRENCY:
+                finished, futures = ray.wait(futures, num_returns = 1)
+                for done in finished:
+                    metablocking_method, metablocking_results = ray.get(done)
+                    filename = f"{metablocking_method}_12.csv"
+                    loaded = os.path.exists(f"{RESULTS}/{filename}")
+                    df = pd.DataFrame(metablocking_results)
+                    df.to_csv(f'{RESULTS}/{filename}',
+                    mode='a+', index=False, header=not loaded)
 
-        for metablocking_method, metablocking_results in ray.get(futures):
-            LOADED = os.path.exists(f'{RESULTS}/{metablocking_method}')
+    while futures:
+        finished, futures = ray.wait(futures, num_returns = 1)
+        for done in finished:
+            metablocking_method, metablocking_results = ray.get(done)
+            filename = f"{metablocking_method}_12.csv"
+            loaded = os.path.exists(f"{RESULTS}/{filename}")
             df = pd.DataFrame(metablocking_results)
-            df.to_csv(f'{RESULTS}/{metablocking_method}',
-                    mode='a+', index=False, header=not LOADED)
+            df.to_csv(f'{RESULTS}/{filename}',
+            mode='a+', index=False, header=not loaded)
+
+    print(f"FINISHED {DIR}")
+
+        # for metablocking_method, metablocking_results in ray.get(futures):
+        #     LOADED = os.path.exists(f'{RESULTS}/{metablocking_method}')
+        #     df = pd.DataFrame(metablocking_results)
+        #     df.to_csv(f'{RESULTS}/{metablocking_method}',
+        #             mode='a+', index=False, header=not LOADED)

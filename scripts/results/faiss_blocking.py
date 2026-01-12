@@ -23,9 +23,21 @@ if __name__ == '__main__':
     BLOOM_NAME = 'faiss'
     print(f"Running FAISS for {DIR}")
 
+
+    # # d1 = loaded_dataframe[0]
+    # # d2 = loaded_dataframe[1]
+
+
+    # # d1['title'] = d1['title'] + ' ' + d1['starring']
+    # # d2['title'] = d2['title'] + ' ' + d2['starring']
+    # # attributes = [['title']]
+
+    # loaded_dataframe = d1,d2,loaded_dataframe[2]
+
+
     size = [1024//2]
-    qgrams = [4]
-    TOTAL_LENGTH = 32//2
+    qgrams = [2]
+    TOTAL_LENGTH = 32
 
     adjacent_config = {}
 
@@ -45,13 +57,11 @@ if __name__ == '__main__':
                 ev : dict = faiss_blocking.evaluate(blocks, verbose = False)
                 faiss_evaluation = {'name': f'FAISS {faiss_mode.upper()} Blocking',
                         'candidate_pairs': CNT, 'top_k': k+1}
-
-
                 for keys, items in ev.items():
                     faiss_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
                 faiss_evaluation['config'] = configuration
 
-                filename = f"faiss_{faiss_mode}.csv"
+                filename = f"test_faiss_{faiss_mode}_bigrams.csv"
                 loaded = os.path.exists(f"{RESULTS}/{filename}")
                 df = pd.DataFrame([faiss_evaluation])
                 df.to_csv(f'{RESULTS}/{filename}',

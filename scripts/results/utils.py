@@ -92,7 +92,7 @@ def comparison_cleaning_exp(cc: callable, new_bloom: BloomEncodedData,
     metablocking_method = cc.__name__
     metablocking_results = []
 
-    for i in [1,2,4,8,10,12]:
+    for i in [12]:
 
         new_candidates = wep.process(encoded_data=new_bloom,
                         adjacent_bits=i)
