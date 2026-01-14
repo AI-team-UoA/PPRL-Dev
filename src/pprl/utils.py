@@ -72,7 +72,7 @@ def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> f
 
 
 
-def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False) -> np.array:
+def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False, length: int = -1) -> np.array:
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
 
@@ -110,16 +110,16 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False) -> 
     return avg_similarities
 
 
-def _scm(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool) -> np.array:
+def _scm(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool, length: int) -> np.array:
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
 
 
     xor_sum = np.bitwise_xor(blooms_1, blooms_2).sum(axis=2)
-    matches = blooms_1.shape[2] - xor_sum
+    matches = length - xor_sum
 
 
-    scm_per_attr = matches / blooms_1.shape[2]
+    scm_per_attr = matches / length
 
     avg_similarities = np.mean(scm_per_attr, axis=1)
 

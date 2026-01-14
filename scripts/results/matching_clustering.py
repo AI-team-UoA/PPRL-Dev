@@ -37,12 +37,12 @@ def process_done(processed, results, results_clustering):
 if __name__ == '__main__':
 
 
-    DIR = "D2"
+    DIR = "D4"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'abtclean'
-    FILE2 = 'buyclean'
-    attributes = [['name']]
-    SEP = "|"
+    FILE = 'dblpclean'
+    FILE2 = 'acmclean'
+    attributes = [['title']]
+    SEP = "%"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -56,7 +56,7 @@ if __name__ == '__main__':
     qgrams = [4]
     TOTAL_LENGTH = 32
     futures = []
-    MAX_CONCURRENCY = 24
+    MAX_CONCURRENCY = 30
 
 
     adjacent_config = {}
@@ -71,10 +71,13 @@ if __name__ == '__main__':
         total=TOTAL_LENGTH):
 
 
+
         for metric in ['dice', 'scm']:
             print(f"Running for {metric}")
             for similarity in range(10, 100, 10):
                 thr = similarity / 100
+
+
 
                 future = matching_ray.remote(new_bloom, thr, metric, configuration)
                 futures.append(future)

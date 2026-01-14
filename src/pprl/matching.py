@@ -247,7 +247,8 @@ class Matcher(PPRLFeature):
         avg_similarities : np.array = _metric(
                 bloom_matrix[batch_pairs[:,0]],
                 bloom_matrix[batch_pairs[:,1]],
-                self.matcher_config.concat_bf)
+                self.matcher_config.concat_bf,
+                self.encoded_data.length)
 
         mask = avg_similarities >= self.matcher_config.threshold
         if not np.any(mask):
@@ -266,43 +267,58 @@ class Matcher(PPRLFeature):
 
     def _predict_create_bloom_matrix(self, attributes: list,
                             encoded_data: BloomEncodedData) -> np.array:
-        n_ids = len(self.matcher_config.unique_ids)
+
         n_attrs = len(attributes)
+        n_ids = len(self.matcher_config.unique_ids)
         length = encoded_data.length
 
-        # Pre-allocate matrix
-        bloom_matrix = np.zeros((n_ids, n_attrs, length), dtype=np.uint8)
-        # Create matrices: (n_entities, n_attributes, bf_length)
-        # bloom_matrix = np.zeros((len(self.matcher_config.unique_ids),
-                            # len(attributes), encoded_data.length), dtype=np.uint8)
+        bloom_filter_matrix = np.zeros((n_ids, n_attrs, length), dtype=bool)
+
+        if self.matcher_config.unique_ids is None:
+            for entity_id, fields in self.encoded_data.encoded_dict.items():
+                for attr_idx, attr in enumerate(attributes):
+                    if fields[attr]:
+                        bloom_filter_matrix[entity_id, attr_idx,
+                                np.array(fields[attr])] = True
+
+            return bloom_filter_matrix
+
+        n_ids = len(self.matcher_config.unique_ids)
+        length = encoded_data.length
+
 
         # Fill the bloom matrix
         for eid_idx, eid in enumerate(self.matcher_config.unique_ids):
-            entity_attrs = encoded_data.bitarray_dict[eid]
+            fields = encoded_data.encoded_dict[eid]
             for attr_idx, attr in enumerate(attributes):
-                bloom_matrix[eid_idx, attr_idx] = np.frombuffer(
-                    entity_attrs[attr].unpack(), dtype=np.uint8
-                )
-                # bitarr = encoded_data.bitarray_dict[eid][attr]
-                # bloom_matrix[eid_idx, attr_idx] = np.array(bitarr.tolist(), dtype=np.uint8)
+                if fields[attr]:
+                    bloom_filter_matrix[eid_idx, attr_idx,
+                            np.array(fields[attr])] = True
 
-        return bloom_matrix
+        return bloom_filter_matrix
 
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> Graph:
 
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
             else encoded_data.attributes
-
-        id_to_idx = {eid: idx \
-            for idx, eid in enumerate(self.matcher_config.unique_ids)}
-        idx_to_id = {idx: eid for eid, idx in id_to_idx.items()}
-        unique_ids_arr = np.array(self.matcher_config.unique_ids)
-
+        if self.matcher_config.unique_ids:
+            id_to_idx = {eid: idx \
+                for idx, eid in enumerate(self.matcher_config.unique_ids)}
+        # idx_to_id = {idx: eid for eid, idx in id_to_idx.items()}
+            unique_ids_arr = np.array(self.matcher_config.unique_ids)
 
         # Prepare candidate indices
-        idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
-                            for eid1, eid2 in self.matcher_config.candidates])
-        n_candidates = len(idx_pairs)
+            idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
+                                for eid1, eid2 in self.matcher_config.candidates])
+
+        else:
+            unique_ids_arr = np.arange(0, self.encoded_data.bounds[1])
+            ids_1 = np.arange(0, self.encoded_data.bounds[0])
+            ids_2 = np.arange(self.encoded_data.bounds[0], self.encoded_data.bounds[1])
+
+            idx_pairs = np.transpose([np.repeat(ids_1, len(ids_2)), np.tile(ids_2, len(ids_1))])
+
+        n_candidates = len(idx_pairs) if self.matcher_config else self.encoded_data.bounds[1]
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
         graph = Graph()
