@@ -110,7 +110,7 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False) -> 
     return avg_similarities
 
 
-def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
+def _scm(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool) -> np.array:
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
 

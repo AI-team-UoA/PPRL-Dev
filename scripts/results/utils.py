@@ -1,12 +1,16 @@
 """Utils for Results Generation"""
-
+from typing import Dict
 from itertools import product
 import pandas as pd
 import ray
 import ray.actor
+import networkx
+from pprl.matching import Matcher
 
 from pprl.comparison_cleaning import AbstractMetablocking
 from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from pprl.clustering import UniqueMappingClustering, \
+    ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 def load_dataframe(path: str, files: tuple, sep: str):
     """Loads Dataframe"""
@@ -124,7 +128,7 @@ def evaluate_encoder_ray(new_bloom: BloomEncodedData,
                     verbose = False)
 
     my_ev = {'name': 'Encoder',
-        'candidate_pairs': len(new_bloom.candidate_pairs),
+        'candidate_pairs': new_bloom.calculate_distinct_candidate_pairs(adjacent_bits),
     }
 
     for keys, items in ev.items():
@@ -132,6 +136,7 @@ def evaluate_encoder_ray(new_bloom: BloomEncodedData,
 
 
     my_ev['config'] = configuration
+    my_ev['Average Bits %'] = new_bloom.calculate_average_active_bits()
 
 
     return adjacent_bits, my_ev
@@ -154,3 +159,52 @@ def candidate_pairs_and_active_bits_ray(new_bloom: BloomEncodedData,
 
 
     return adjacent_bits, distinct_candidate_pairs, index
+
+
+@ray.remote
+def matching_ray(new_bloom: BloomEncodedData,
+            thr: float, metric, configuration: dict):
+    """Experiments for Matching"""
+
+    matcher = Matcher(batch_size=10_000, threshold= thr,
+            metric=metric)
+
+    graph : networkx.Graph = matcher.predict(new_bloom)
+    cnt = graph.number_of_edges()
+
+    ev : dict = matcher.evaluate(graph, verbose = False)
+    matcher_ev = {
+        'name': f'Matching with {metric}',
+        'total_matches': cnt, 'similarity_threshold': thr}
+    for keys, items in ev.items():
+        matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+    matcher_ev['config'] = configuration
+
+    evaluations : Dict[str, list] = {}
+
+
+    for cl in [UniqueMappingClustering,
+        ConnectedComponentsClustering, KiralyMSMApproximateClustering]:
+
+        cluster = cl()
+        evaluations[cl.__name__] = []
+        for similarity_cl in range(10,100, 10):
+            thr_cl = similarity_cl / 100
+            predicted = cluster.process(graph, new_bloom, thr_cl)
+            ev_cl : dict = cluster.evaluate(predicted, verbose=False)
+            cluster_ev = {
+                'name': f'Clustering with {cl.__name__}',
+                'total_clusters': len(predicted),
+                'clustering_threshold': thr_cl,
+                'matcher': metric,
+                'matching_thr': thr,
+            }
+            for keys, items in ev_cl.items():
+                cluster_ev[keys] = round(items, 2) \
+                    if isinstance(items, float) else items
+
+            cluster_ev['config'] = configuration
+            evaluations[cl.__name__].append(cluster_ev)
+
+    return matcher_ev, evaluations, metric

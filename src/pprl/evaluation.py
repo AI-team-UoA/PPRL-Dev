@@ -185,11 +185,19 @@ class Evaluation:
 
         return results_dict
 
-    def _create_entity_index_from_clusters(
+    def create_entity_index_from_clusters(
             self,
             clusters: list,
     ) -> dict:
+        """
+        Docstring for create_entity_index_from_clusters
 
+        :param self: Description
+        :param clusters: Description
+        :type clusters: list
+        :return: Description
+        :rtype: dict
+        """
         _limit = self.encoded_data.bounds[0]
         _d2_limit = self.encoded_data.bounds[1]
 

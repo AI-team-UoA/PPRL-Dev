@@ -8,13 +8,13 @@ from dataclasses import dataclass
 import numpy as np
 from networkx import Graph
 from ordered_set import OrderedSet
-from openfhe import CCParamsBGVRNS, SecurityLevel, \
-    CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
+# from openfhe import CCParamsBGVRNS, SecurityLevel, \
+#     CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
 from tqdm.auto import tqdm
 import pandas as pd
 
 from pprl.utils import _dice, _scm
-import pprl.openfhe_similarity
+# import pprl.openfhe_similarity
 from pprl.datamodel import  Block, EncodedData
 from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
 from pprl.evaluation import Evaluation
@@ -235,47 +235,60 @@ class Matcher(PPRLFeature):
     def _predict_batches(self,
             batch_pairs : np.array,
             bloom_matrix: np.array,
-            idx_to_id: dict) -> List[Tuple[int, int, float]]:
+            unique_ids_arr: np.array) -> List[Tuple[int, int, float]]:
 
         metrics_dict = {
             "dice" : _dice,
             "scm" : _scm
         }
 
-        _metric = metrics_dict['dice'] \
-            if self.matcher_config.metric not in metrics_dict \
-            else metrics_dict[self.matcher_config.metric]
+        _metric = metrics_dict.get(self.matcher_config.metric, metrics_dict['dice'])
 
+        avg_similarities : np.array = _metric(
+                bloom_matrix[batch_pairs[:,0]],
+                bloom_matrix[batch_pairs[:,1]],
+                self.matcher_config.concat_bf)
 
-        avg_similarities : np.array = _metric(bloom_matrix[batch_pairs[:,0]],
-                                    bloom_matrix[batch_pairs[:,1]], self.matcher_config.concat_bf)
+        mask = avg_similarities >= self.matcher_config.threshold
+        if not np.any(mask):
+            return []
 
+        valid_pairs = batch_pairs[mask]
+        valid_scores = avg_similarities[mask]
+        # edges = [(idx_to_id[i], idx_to_id[j], float(sim))
+        #         for (i,j), sim in zip(batch_pairs, avg_similarities)
+        #         if sim >= self.matcher_config.threshold]
 
-        print([(idx_to_id[i], idx_to_id[j], float(sim))
-                for (i,j), sim in zip(batch_pairs, avg_similarities)])
+        src_ids = unique_ids_arr[valid_pairs[:, 0]]
+        tgt_ids = unique_ids_arr[valid_pairs[:, 1]]
 
-        edges = [(idx_to_id[i], idx_to_id[j], float(sim))
-                for (i,j), sim in zip(batch_pairs, avg_similarities)
-                if sim >= self.matcher_config.threshold]
-
-        return edges
+        return list(zip(src_ids, tgt_ids, valid_scores.astype(float)))
 
     def _predict_create_bloom_matrix(self, attributes: list,
                             encoded_data: BloomEncodedData) -> np.array:
+        n_ids = len(self.matcher_config.unique_ids)
+        n_attrs = len(attributes)
+        length = encoded_data.length
+
+        # Pre-allocate matrix
+        bloom_matrix = np.zeros((n_ids, n_attrs, length), dtype=np.uint8)
         # Create matrices: (n_entities, n_attributes, bf_length)
-        bloom_matrix = np.zeros((len(self.matcher_config.unique_ids),
-                            len(attributes), encoded_data.length), dtype=np.uint8)
+        # bloom_matrix = np.zeros((len(self.matcher_config.unique_ids),
+                            # len(attributes), encoded_data.length), dtype=np.uint8)
 
         # Fill the bloom matrix
         for eid_idx, eid in enumerate(self.matcher_config.unique_ids):
+            entity_attrs = encoded_data.bitarray_dict[eid]
             for attr_idx, attr in enumerate(attributes):
-                bitarr = encoded_data.bitarray_dict[eid][attr]
-                bloom_matrix[eid_idx, attr_idx] = np.array(bitarr.tolist(), dtype=np.uint8)
+                bloom_matrix[eid_idx, attr_idx] = np.frombuffer(
+                    entity_attrs[attr].unpack(), dtype=np.uint8
+                )
+                # bitarr = encoded_data.bitarray_dict[eid][attr]
+                # bloom_matrix[eid_idx, attr_idx] = np.array(bitarr.tolist(), dtype=np.uint8)
 
         return bloom_matrix
 
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> Graph:
-
 
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
             else encoded_data.attributes
@@ -283,6 +296,7 @@ class Matcher(PPRLFeature):
         id_to_idx = {eid: idx \
             for idx, eid in enumerate(self.matcher_config.unique_ids)}
         idx_to_id = {idx: eid for eid, idx in id_to_idx.items()}
+        unique_ids_arr = np.array(self.matcher_config.unique_ids)
 
 
         # Prepare candidate indices
@@ -296,8 +310,9 @@ class Matcher(PPRLFeature):
                     desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
             edges = self._predict_batches(idx_pairs[start:end],
-                                bloom_matrix, idx_to_id)
-            graph.add_weighted_edges_from(edges)
+                                bloom_matrix, unique_ids_arr)
+            if edges:
+                graph.add_weighted_edges_from(edges)
 
         return graph
 

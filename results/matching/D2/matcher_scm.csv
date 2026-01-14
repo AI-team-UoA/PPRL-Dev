@@ -1,0 +1,12 @@
+name,total_matches,similarity_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Matching with scm,256238,0.9,0.4,96.43,0.8,1026,255212,1038,38,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.2,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.3,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1128566,0.8,0.09,100.0,0.19,1064,1127502,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.6,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,13200,0.9,6.86,85.15,12.7,906,12294,918,158,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 3, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.1,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 3, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.4,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 3, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.4,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.7,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,1144864,0.3,0.09,100.0,0.19,1064,1143800,1076,0,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 3, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

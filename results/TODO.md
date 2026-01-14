@@ -16,15 +16,16 @@
 - [x] D4 Finished 19/12 12:00  @pyravlos3
 - [x] D8 Finished 24/12 2:00 @pyravlos5
 - [x] D9 Finished 24/12 2:00 @pyravlos1
-- [x] D10 Finished 26/12 17:30 @pyravlos5 @pyravlos1
+- [x] D10 Finished 26/12 17:30 @pyravlos5
+- [x] D10 - more hashes Finished 14/1 18:30 @pyravlos1
 
 ## Candidate pairs and AVG Active Bits
 - [x] D2 Finished 10/1 17:30 @pyravlos5
 - [x] D3 Finished 10/1 18:00 @pyravlos5
 - [x] D4 Finished 11/1 15:30 @pyravlos5
 - [x] D8 Finished 11/1 15:30 @pyravlos5
-- [x] D9 Pending 11/1 23:00 @pyravlos5
-- [ ] D10
+- [x] D9 Finished 11/1 23:00 @pyravlos5
+- [x] D10 Finished 12/1 15:00 @pyravlos5
 
 
 ## FAISS FLAT HNSW and LSH for size 1024 and qgrams 4
@@ -44,3 +45,10 @@
 - [x] D9 Finished 11/1 16:00 @pyravlos1
 - [x] D10 Finished 12/1 12:00 @pyravlos1
 
+## MATCHING & CLUSTERING for size 1024 and qgrams 4 and 12-adjacent
+- [x] D2 Pending 14/1 18:00 @pyravlos1
+- [ ] D3
+- [ ] D4
+- [ ] D8
+- [ ] D9
+- [ ] D10
