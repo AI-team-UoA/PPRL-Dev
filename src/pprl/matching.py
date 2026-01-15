@@ -21,6 +21,7 @@ from pprl.evaluation import Evaluation
 from pprl.datamodel import PPRLFeature
 
 
+
 @dataclass
 class MatcherConfig:
     """Matcher config class"""
@@ -155,8 +156,11 @@ class Matcher(PPRLFeature):
         if not encoded_data.skip_ground_truth:
             self.ground_truth = encoded_data.ground_truth
 
-        self.matcher_config.candidates, self.matcher_config.unique_ids = \
-            self._candidates(blocks) if blocks else self._candidates(encoded_data)
+        if blocks:
+            self.matcher_config.candidates, self.matcher_config.unique_ids = \
+            self._candidates(blocks)
+        else:
+            self.matcher_config.candidates = self.matcher_config.unique_ids = None
 
 
         if isinstance(encoded_data, BloomEncodedData):
@@ -251,8 +255,9 @@ class Matcher(PPRLFeature):
                 self.encoded_data.length)
 
         mask = avg_similarities >= self.matcher_config.threshold
+
         if not np.any(mask):
-            return []
+            return [], [], []
 
         valid_pairs = batch_pairs[mask]
         valid_scores = avg_similarities[mask]
@@ -263,29 +268,38 @@ class Matcher(PPRLFeature):
         src_ids = unique_ids_arr[valid_pairs[:, 0]]
         tgt_ids = unique_ids_arr[valid_pairs[:, 1]]
 
-        return list(zip(src_ids, tgt_ids, valid_scores.astype(float)))
+        return src_ids, tgt_ids, valid_scores
 
     def _predict_create_bloom_matrix(self, attributes: list,
                             encoded_data: BloomEncodedData) -> np.array:
 
         n_attrs = len(attributes)
-        n_ids = len(self.matcher_config.unique_ids)
         length = encoded_data.length
-
-        bloom_filter_matrix = np.zeros((n_ids, n_attrs, length), dtype=bool)
+        n_bytes = (length + 7) // 8
 
         if self.matcher_config.unique_ids is None:
+            bloom_filter_matrix = np.zeros((self.encoded_data.bounds[1],
+                                n_attrs, n_bytes), dtype=np.uint8)
+
             for entity_id, fields in self.encoded_data.encoded_dict.items():
                 for attr_idx, attr in enumerate(attributes):
                     if fields[attr]:
-                        bloom_filter_matrix[entity_id, attr_idx,
-                                np.array(fields[attr])] = True
+                        indices = np.array(fields[attr])
+                        byte_indices = indices // 8
+                        bit_offsets = indices % 8
+                        np.bitwise_or.at(
+                            bloom_filter_matrix[entity_id, attr_idx],
+                            byte_indices,
+                            (1 << bit_offsets).astype(np.uint8)
+                        )
+
 
             return bloom_filter_matrix
 
         n_ids = len(self.matcher_config.unique_ids)
         length = encoded_data.length
 
+        bloom_filter_matrix = np.zeros((n_ids, n_attrs, length), dtype=bool)
 
         # Fill the bloom matrix
         for eid_idx, eid in enumerate(self.matcher_config.unique_ids):
@@ -325,10 +339,12 @@ class Matcher(PPRLFeature):
         for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
                     desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
-            edges = self._predict_batches(idx_pairs[start:end],
+            src, tgt, weights = self._predict_batches(idx_pairs[start:end],
                                 bloom_matrix, unique_ids_arr)
-            if edges:
-                graph.add_weighted_edges_from(edges)
+            if src is not None and len(src) > 0:
+                edge_gen = zip(src, tgt, weights.astype(float))
+                graph.add_weighted_edges_from(edge_gen)
+
 
         return graph
 

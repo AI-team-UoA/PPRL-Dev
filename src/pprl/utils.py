@@ -6,6 +6,8 @@ import numpy as np
 from networkx import Graph
 from pprl.datamodel import Block
 
+POPCOUNT_TABLE = np.array([bin(x).count('1') for x in range(256)], dtype=np.uint8)
+
 def chi_square(in_array: np.array) -> float:
     """Chi Square Method
 
@@ -90,14 +92,16 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False, len
         return  (2 * intersections[valid_mask]) / denominators[valid_mask]
 
 
-
-
-
-    intersections = np.sum(blooms_1 & blooms_2, axis=2)  # (n_candidates, n_attributes)
+    intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
+    intersections = POPCOUNT_TABLE[intersection_bytes].sum(axis=2)
+    # intersections = np.sum(blooms_1 & blooms_2, axis=2)  # (n_candidates, n_attributes)
 
     # Cardinalities
-    card_1 = np.sum(blooms_1, axis=2)  # (n_candidates, n_attributes)
-    card_2 = np.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
+    # card_1 = np.sum(blooms_1, axis=2)  # (n_candidates, n_attributes)
+    # card_2 = np.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
+    card_1 = POPCOUNT_TABLE[blooms_1].sum(axis=2)
+    card_2 = POPCOUNT_TABLE[blooms_2].sum(axis=2)
+
 
     denominators = card_1 + card_2
     # Avoid division by zero
@@ -114,8 +118,11 @@ def _scm(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool, length: int)
     # Vectorized intersection and cardinality computation
     # Intersection: bitwise AND
 
+    xor_bytes = np.bitwise_xor(blooms_1, blooms_2)
 
-    xor_sum = np.bitwise_xor(blooms_1, blooms_2).sum(axis=2)
+
+
+    xor_sum = POPCOUNT_TABLE[xor_bytes].sum(axis=2)
     matches = length - xor_sum
 
 

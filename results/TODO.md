@@ -47,8 +47,8 @@
 
 ## MATCHING & CLUSTERING for size 1024 and qgrams 4 and 12-adjacent
 - [x] D2 Finished 14/1 22:00 @pyravlos1
-- [x] D3 Finished 14/1 01:30 @pyravlos5
+- [x] D3 Finished 15/1 01:30 @pyravlos5
 - [x] D4 Pending 14/1 22:00 @pyravlos1
-- [ ] D8
+- [x] D8 Pending 15/1 01:30 @pyravlos5
 - [ ] D9
 - [ ] D10

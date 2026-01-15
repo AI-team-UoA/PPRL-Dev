@@ -166,7 +166,7 @@ def matching_ray(new_bloom: BloomEncodedData,
             thr: float, metric, configuration: dict):
     """Experiments for Matching"""
 
-    matcher = Matcher(batch_size=10_000, threshold= thr,
+    matcher = Matcher(batch_size=1_000, threshold= thr,
             metric=metric)
 
     graph : networkx.Graph = matcher.predict(new_bloom)
