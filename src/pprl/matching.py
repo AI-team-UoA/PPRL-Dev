@@ -6,14 +6,14 @@ from typing import Literal, List, Dict, overload, Tuple, Union, Set
 from dataclasses import dataclass
 
 import numpy as np
-from networkx import Graph
+from rustworkx import PyGraph as Graph
 from ordered_set import OrderedSet
 # from openfhe import CCParamsBGVRNS, SecurityLevel, \
 #     CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
 from tqdm.auto import tqdm
 import pandas as pd
 
-from pprl.utils import _dice, _scm
+from pprl.utils import _dice, _scm, _cosine, _jaccard
 # import pprl.openfhe_similarity
 from pprl.datamodel import  Block, EncodedData
 from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
@@ -42,7 +42,7 @@ class Matcher(PPRLFeature):
     def __init__(self,
         batch_size : int = 10_000,
         threshold : float = 0.6,
-        metric : Literal["dice", "scm", 'jaccard'] = "dice",
+        metric : Literal["dice", "scm", 'jaccard', "cosine"] = "dice",
         attributes : List[str] = None,
         concat_bf : bool = False
     ) -> None:
@@ -219,7 +219,7 @@ class Matcher(PPRLFeature):
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
             else encoded_data.attributes
 
-        graph = Graph()
+        graph : Graph = Graph()
 
         homomorphic_dict = encoded_data.encoded_dict
 
@@ -243,16 +243,18 @@ class Matcher(PPRLFeature):
 
         metrics_dict = {
             "dice" : _dice,
-            "scm" : _scm
+            "scm" : _scm,
+            "jaccard": _jaccard,
+            "cosine" : _cosine
         }
+
+        # print(f"\n\n\n {self.matcher_config.concat_bf}")
 
         _metric = metrics_dict.get(self.matcher_config.metric, metrics_dict['dice'])
 
         avg_similarities : np.array = _metric(
                 bloom_matrix[batch_pairs[:,0]],
-                bloom_matrix[batch_pairs[:,1]],
-                self.matcher_config.concat_bf,
-                self.encoded_data.length)
+                bloom_matrix[batch_pairs[:,1]])
 
         mask = avg_similarities >= self.matcher_config.threshold
 
@@ -268,30 +270,25 @@ class Matcher(PPRLFeature):
         src_ids = unique_ids_arr[valid_pairs[:, 0]]
         tgt_ids = unique_ids_arr[valid_pairs[:, 1]]
 
-        return src_ids, tgt_ids, valid_scores
+        return src_ids.tolist(), tgt_ids.tolist(), valid_scores.tolist()
 
     def _predict_create_bloom_matrix(self, attributes: list,
                             encoded_data: BloomEncodedData) -> np.array:
 
         n_attrs = len(attributes)
         length = encoded_data.length
-        n_bytes = (length + 7) // 8
 
         if self.matcher_config.unique_ids is None:
             bloom_filter_matrix = np.zeros((self.encoded_data.bounds[1],
-                                n_attrs, n_bytes), dtype=np.uint8)
+                                n_attrs, length), dtype=np.bool)
 
             for entity_id, fields in self.encoded_data.encoded_dict.items():
                 for attr_idx, attr in enumerate(attributes):
                     if fields[attr]:
                         indices = np.array(fields[attr])
-                        byte_indices = indices // 8
-                        bit_offsets = indices % 8
-                        np.bitwise_or.at(
-                            bloom_filter_matrix[entity_id, attr_idx],
-                            byte_indices,
-                            (1 << bit_offsets).astype(np.uint8)
-                        )
+                        bloom_filter_matrix[entity_id,
+                        attr_idx,
+                        indices]  = True
 
 
             return bloom_filter_matrix
@@ -332,19 +329,21 @@ class Matcher(PPRLFeature):
 
             idx_pairs = np.transpose([np.repeat(ids_1, len(ids_2)), np.tile(ids_2, len(ids_1))])
 
-        n_candidates = len(idx_pairs) if self.matcher_config else self.encoded_data.bounds[1]
+        # n_candidates = len(idx_pairs) if self.matcher_config else self.encoded_data.bounds[1]
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
         graph = Graph()
-        for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
-                    desc="Predicting batches", position=1, leave=False):
-            end = min(start + self.matcher_config.batch_size, n_candidates)
-            src, tgt, weights = self._predict_batches(idx_pairs[start:end],
-                                bloom_matrix, unique_ids_arr)
-            if src is not None and len(src) > 0:
-                edge_gen = zip(src, tgt, weights.astype(float))
-                graph.add_weighted_edges_from(edge_gen)
+        _ = graph.add_nodes_from(range(self.encoded_data.bounds[1]))
+        # for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
+        #             desc="Predicting batches", position=1, leave=False):
+        # end = n_candidates
+        src, tgt, weights = self._predict_batches(idx_pairs,
+                            bloom_matrix, unique_ids_arr)
+        if src is not None and len(src) > 0:
 
+
+            edges_list = list(zip(src, tgt, weights))
+            graph.add_edges_from(edges_list)
 
         return graph
 
@@ -363,11 +362,10 @@ class Matcher(PPRLFeature):
 
         eval_obj = Evaluation(self.encoded_data)
         true_positives = 0
-        total_matching_pairs = prediction.number_of_edges()
+        total_matching_pairs = prediction.num_edges()
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
             id2 = self.encoded_data.bounds[0] + id2
-            if (id1 in prediction and id2 in prediction[id1]) or   \
-                 (id2 in prediction and id1 in prediction[id2]):
+            if prediction.has_edge(id1, id2):
                 true_positives += 1
 
         eval_obj.calculate_scores(true_positives=true_positives,

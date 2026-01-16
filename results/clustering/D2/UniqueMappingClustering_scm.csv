@@ -1,0 +1,10 @@
+name,total_clusters,clustering_threshold,matcher,matching_thr,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Clustering with UniqueMappingClustering,998,0.1,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.2,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.3,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.4,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.5,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.6,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.7,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.8,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Clustering with UniqueMappingClustering,998,0.9,scm,0.95,85.37,80.08,82.64,852,146,864,212,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

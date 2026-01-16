@@ -74,62 +74,60 @@ def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> f
 
 
 
-def _dice(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool = False, length: int = -1) -> np.array:
-    # Vectorized intersection and cardinality computation
-    # Intersection: bitwise AND
-
-    if concat_bf:
-        concatenated_1 = blooms_1.reshape(blooms_1.shape[0], -1)
-        concatenated_2 = blooms_2.reshape(blooms_2.shape[0], -1)
-        intersections = np.sum(concatenated_1 & concatenated_2, axis=1)  # (n_candidates, n_attributes)
-        card_1 = np.sum(concatenated_1, axis=1)  # (n_candidates, n_attributes)
-        card_2 = np.sum(concatenated_2, axis=1)  # (n_candidates, n_attributes)
-
-        denominators = card_1 + card_2
-        # Avoid division by zero
-        dice_scores = np.zeros_like(intersections, dtype=np.float64)
-        valid_mask = denominators > 0
-        return  (2 * intersections[valid_mask]) / denominators[valid_mask]
-
+def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
 
     intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
-    intersections = POPCOUNT_TABLE[intersection_bytes].sum(axis=2)
-    # intersections = np.sum(blooms_1 & blooms_2, axis=2)  # (n_candidates, n_attributes)
+    intersections = intersection_bytes.sum(axis=2)
 
-    # Cardinalities
-    # card_1 = np.sum(blooms_1, axis=2)  # (n_candidates, n_attributes)
-    # card_2 = np.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
-    card_1 = POPCOUNT_TABLE[blooms_1].sum(axis=2)
-    card_2 = POPCOUNT_TABLE[blooms_2].sum(axis=2)
-
+    card_1 = np.sum(blooms_1, axis=2)  # (n_candidates, n_attributes)
+    card_2 = np.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
 
     denominators = card_1 + card_2
-    # Avoid division by zero
     dice_scores = np.zeros_like(intersections, dtype=np.float64)
     valid_mask = denominators > 0
     dice_scores[valid_mask] = (2 * intersections[valid_mask]) / denominators[valid_mask]
     avg_similarities = np.mean(dice_scores, axis=1)
 
+    return avg_similarities
 
+def _jaccard(blooms_1: np.array, blooms_2: np.array):
+    intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
+    intersections = intersection_bytes.sum(axis=2)
+
+    # 2. Cardinalities (Count of True)
+    card_1 = np.sum(blooms_1, axis=2)
+    card_2 = np.sum(blooms_2, axis=2)
+
+    union = card_1 + card_2 - intersections
+    scores = np.zeros_like(intersections, dtype=np.float64)
+    mask = union > 0
+    scores[mask] = intersections[mask] / union[mask]
+    avg_similarities = np.mean(scores, axis=1)
+    return avg_similarities
+
+def _cosine(blooms_1: np.array, blooms_2: np.array):
+    intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
+    intersections = intersection_bytes.sum(axis=2)
+
+    # 2. Cardinalities (Count of True)
+    card_1 = np.sum(blooms_1, axis=2)
+    card_2 = np.sum(blooms_2, axis=2)
+
+    denom = np.sqrt(card_1 * card_2)
+    scores = np.zeros_like(intersections, dtype=np.float64)
+    mask = denom > 0
+    scores[mask] = intersections[mask] / denom[mask]
+    avg_similarities = np.mean(scores, axis=1)
     return avg_similarities
 
 
-def _scm(blooms_1 : np.array, blooms_2 : np.array, concat_bf: bool, length: int) -> np.array:
-    # Vectorized intersection and cardinality computation
-    # Intersection: bitwise AND
-
+def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
+    length = blooms_1.shape[2]
     xor_bytes = np.bitwise_xor(blooms_1, blooms_2)
-
-
-
-    xor_sum = POPCOUNT_TABLE[xor_bytes].sum(axis=2)
+    xor_sum = xor_bytes.sum(axis=2)
     matches = length - xor_sum
-
-
     scm_per_attr = matches / length
-
     avg_similarities = np.mean(scm_per_attr, axis=1)
-
 
     return avg_similarities
 

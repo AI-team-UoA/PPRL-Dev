@@ -4,7 +4,7 @@ from itertools import product
 import pandas as pd
 import ray
 import ray.actor
-import networkx
+from rustworkx import PyGraph as Graph
 from pprl.matching import Matcher
 
 from pprl.comparison_cleaning import AbstractMetablocking
@@ -169,8 +169,8 @@ def matching_ray(new_bloom: BloomEncodedData,
     matcher = Matcher(batch_size=1_000, threshold= thr,
             metric=metric)
 
-    graph : networkx.Graph = matcher.predict(new_bloom)
-    cnt = graph.number_of_edges()
+    graph : Graph = matcher.predict(new_bloom)
+    cnt = graph.num_edges()
 
     ev : dict = matcher.evaluate(graph, verbose = False)
     matcher_ev = {

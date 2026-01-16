@@ -5,7 +5,8 @@ from queue import PriorityQueue
 from collections import defaultdict
 from time import time
 from typing import Dict, List
-from networkx import Graph, connected_components
+from rustworkx import PyGraph as Graph, connected_components
+# from networkx import Graph, connected_components
 from ordered_set import OrderedSet
 from pprl.encoded_data import BloomEncodedData
 from pprl.base_clustering import AbstractClustering, ExtendedSimilarityEdge
@@ -42,9 +43,9 @@ class ConnectedComponentsClustering(AbstractClustering):
         self.similarity_threshold: float = similarity_threshold
         graph_copy = graph.copy()
         if self.similarity_threshold is not None:
-            for x in graph.edges(data=True):
-                if x[2]['weight'] < self.similarity_threshold:
-                    graph_copy.remove_edge(x[0], x[1])
+            for (u,v, weight) in graph.weighted_edge_list():
+                if weight < self.similarity_threshold:
+                    graph_copy.remove_edge(u,v)
         clusters = list(connected_components(graph_copy))
         resulting_clusters = list(filter(lambda x: len(x) == 2, clusters))
         self.execution_time = time() - start_time
@@ -92,16 +93,17 @@ class UniqueMappingClustering(AbstractClustering):
         matched_entities = OrderedSet()
         self.encoded_data = encoded_data
         new_graph = Graph()
-        priority_queue = PriorityQueue(maxsize = graph.number_of_edges()*2)
-        for x in graph.edges(data=True):
-            if x[2]['weight'] > self.similarity_threshold:
-                priority_queue.put_nowait((1- x[2]['weight'], x[0], x[1]))
+        new_graph.add_nodes_from(range(self.encoded_data.bounds[1]))
+        priority_queue = PriorityQueue(maxsize = graph.num_edges()*2)
+        for (u, v, weight) in graph.weighted_edge_list():
+            if weight > self.similarity_threshold:
+                priority_queue.put_nowait((1 - weight, u, v))
 
         while not priority_queue.empty():
             sim, entity_1, entity_2 = priority_queue.get()
             if entity_1 in matched_entities or entity_2 in matched_entities:
                 continue
-            new_graph.add_edge(entity_1, entity_2, weight=sim)
+            new_graph.add_edge(entity_1, entity_2, sim)
             matched_entities.add(entity_1)
             matched_entities.add(entity_2)
 
@@ -258,20 +260,21 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         start_time = time()
         self.similarity_threshold : float = similarity_threshold
         self.encoded_data = encoded_data
-        number_of_comparisons : int = len(graph.edges(data=True))
+        number_of_comparisons : int = len(graph.edge_list())
         clusters : list = []
 
         if number_of_comparisons == 0:
             return clusters
 
         new_graph : Graph = Graph()
+        new_graph.add_nodes_from(range(self.encoded_data.bounds[1]))
         men : set = set()
         self.men_candidates : dict = defaultdict(list)
         self.women_candidates : dict = defaultdict(list)
 
-        for v1, v2, data in graph.edges(data=True):
-            man, woman = self.sorted_indicators(v1, v2)
-            similarity = data.get('weight', 0)
+        for (u, v, weight) in graph.weighted_edge_list():
+            man, woman = self.sorted_indicators(u, v)
+            similarity = weight
             if similarity > self.similarity_threshold:
                 self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
                                                                 right_node=woman,
@@ -323,7 +326,7 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         for _, edges in self.current_matches.items():
             for edge in edges:
                 man, woman, similarity = edge.left_node, edge.right_node, edge.similarity
-                new_graph.add_edge(man, woman, weight=similarity)
+                new_graph.add_edge(man, woman, similarity)
 
         clusters = list(connected_components(new_graph))
         self.execution_time = time() - start_time

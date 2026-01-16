@@ -1,0 +1,2 @@
+name,total_matches,similarity_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Matching with scm,201537,0.95,0.51,95.68,1.0,1018,200519,1030,46,"{'attributes': ['name'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
