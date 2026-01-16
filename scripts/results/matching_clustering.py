@@ -39,12 +39,12 @@ def process_done(processed, results, results_clustering):
 if __name__ == '__main__':
 
 
-    DIR = "D2"
+    DIR = "D3"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'abtclean'
-    FILE2 = 'buyclean'
-    attributes = [['name']]
-    SEP = "|"
+    FILE = 'amazonclean'
+    FILE2 = 'gpclean'
+    attributes = [['title']]
+    SEP = "#"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     qgrams = [4]
     TOTAL_LENGTH = 32
     futures = []
-    MAX_CONCURRENCY = 25
+    MAX_CONCURRENCY = 24
 
 
     adjacent_config = {}

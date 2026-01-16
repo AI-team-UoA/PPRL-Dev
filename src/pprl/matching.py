@@ -329,21 +329,19 @@ class Matcher(PPRLFeature):
 
             idx_pairs = np.transpose([np.repeat(ids_1, len(ids_2)), np.tile(ids_2, len(ids_1))])
 
-        # n_candidates = len(idx_pairs) if self.matcher_config else self.encoded_data.bounds[1]
+        n_candidates = len(idx_pairs) if self.matcher_config else self.encoded_data.bounds[1]
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
         graph = Graph()
         _ = graph.add_nodes_from(range(self.encoded_data.bounds[1]))
-        # for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
-        #             desc="Predicting batches", position=1, leave=False):
-        # end = n_candidates
-        src, tgt, weights = self._predict_batches(idx_pairs,
-                            bloom_matrix, unique_ids_arr)
-        if src is not None and len(src) > 0:
-
-
-            edges_list = list(zip(src, tgt, weights))
-            graph.add_edges_from(edges_list)
+        for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
+                    desc="Predicting batches", position=1, leave=False):
+            end = min(start + self.matcher_config.batch_size, n_candidates)
+            src, tgt, weights = self._predict_batches(idx_pairs[start:end],
+                                bloom_matrix, unique_ids_arr)
+            if src is not None and len(src) > 0:
+                edges_list = list(zip(src, tgt, weights))
+                graph.add_edges_from(edges_list)
 
         return graph
 
