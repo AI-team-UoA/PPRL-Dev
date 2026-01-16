@@ -46,9 +46,9 @@
 - [x] D10 Finished 12/1 12:00 @pyravlos1
 
 ## MATCHING & CLUSTERING for size 1024 and qgrams 4 and 12-adjacent
-Note : added more similarity functions and changed networkx to rustworkx 
+Note : added more similarity functions and changed networkx to rustworkx
 - [x] D2 Restarted 16/1 17:30 @pyravlos1
-- [x] D3 Finished 15/1 01:30 @pyravlos5
+- [x] D3 Restarted 16/1 17:30 @pyravlos5
 - [x] D4 Finished 15/1 13:00 @pyravlos1
 - [x] D8 Pending 15/1 01:30 @pyravlos5
 - [x] D9 Pending 15/1 13:00 @pyravlos1

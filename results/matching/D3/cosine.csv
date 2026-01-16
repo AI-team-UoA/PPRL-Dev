@@ -1,0 +1,5 @@
+name,total_matches,similarity_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Matching with cosine,126324,0.2,0.87,99.46,1.72,1096,125228,3181,6,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,230324,0.15,0.48,99.55,0.95,1097,229227,3182,5,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,513690,0.1,0.21,99.73,0.43,1099,512591,3184,3,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,66348,0.25,1.64,98.82,3.23,1089,65259,3174,13,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
