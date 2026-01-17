@@ -39,12 +39,12 @@ def process_done(processed, results, results_clustering):
 if __name__ == '__main__':
 
 
-    DIR = "D4"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'acmclean'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
     attributes = [['title']]
-    SEP = "%"
+    SEP = "|"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -58,12 +58,12 @@ if __name__ == '__main__':
     qgrams = [4]
     TOTAL_LENGTH = 32
     futures = []
-    MAX_CONCURRENCY = 24
+    MAX_CONCURRENCY = 30
 
 
     adjacent_config = {}
 
-    if not ray.is_initialized(): 
+    if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
