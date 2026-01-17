@@ -39,12 +39,12 @@ def process_done(processed, results, results_clustering):
 if __name__ == '__main__':
 
 
-    DIR = "D3"
+    DIR = "D4"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'amazonclean'
-    FILE2 = 'gpclean'
+    FILE = 'dblpclean'
+    FILE2 = 'acmclean'
     attributes = [['title']]
-    SEP = "#"
+    SEP = "%"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -63,7 +63,7 @@ if __name__ == '__main__':
 
     adjacent_config = {}
 
-    if not ray.is_initialized():
+    if not ray.is_initialized(): 
         logging.getLogger("ray").setLevel(logging.ERROR)
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
 
