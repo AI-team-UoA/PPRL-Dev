@@ -49,7 +49,7 @@
 Note : added more similarity functions and changed networkx to rustworkx
 - [x] D2 Finished 16/1 17:30 @pyravlos1
 - [x] D3 Finished 17/1 11:00 @pyravlos5
-- [x] D4 Restarted 16/1 00:45 @pyravlos1
+- [x] D4 Finished 19/1 17:00 @pyravlos1
 - [x] D8 Pending 17/1 11:00 @pyravlos5
-- [ ] D9
+- [x] D9 Pending 19/1 17:00 @pyravlos1
 - [ ] D10

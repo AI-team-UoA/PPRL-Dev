@@ -39,12 +39,12 @@ def process_done(processed, results, results_clustering):
 if __name__ == '__main__':
 
 
-    DIR = "D8"
+    DIR = "D9"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
+    FILE = 'dblpclean'
+    FILE2 = 'scholarclean'
     attributes = [['title']]
-    SEP = "|"
+    SEP = ">"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -58,7 +58,7 @@ if __name__ == '__main__':
     qgrams = [4]
     TOTAL_LENGTH = 32
     futures = []
-    MAX_CONCURRENCY = 30
+    MAX_CONCURRENCY = 12
 
 
     adjacent_config = {}
@@ -72,7 +72,7 @@ if __name__ == '__main__':
                 BLOOM_NAME, loaded_dataframe, adjacent_config),
         total=TOTAL_LENGTH):
 
-        for metric in ['dice', 'scm', 'jaccard', 'cosine']:
+        for metric in ['dice', 'jaccard', 'cosine']:
             print(f"Running for {metric}")
             for similarity in range(5, 100, 5):
                 thr = similarity / 100
