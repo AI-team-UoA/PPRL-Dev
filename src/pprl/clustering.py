@@ -61,11 +61,11 @@ class ConnectedComponentsClustering(AbstractClustering):
         else:
             valid_array = edges
 
-        n_nodes = np.max(edges)
+        n_nodes = int(np.max(edges))
 
         resulting_clusters = self.scipi_connected_components(
             edges=valid_array,
-            n_nodes=n_nodes
+            n_nodes=n_nodes + 1
         )
 
         self.execution_time = time() - start_time
@@ -211,7 +211,7 @@ class UniqueMappingClustering(AbstractClustering):
 
         clusters = ConnectedComponentsClustering.scipi_connected_components(
             edges=unique_edges,
-            n_nodes=np.max(edges)
+            n_nodes=int(np.max(edges)) + 1
         )
         self.execution_time = time() - start_time
         return clusters
@@ -456,11 +456,11 @@ class KiralyMSMApproximateClustering(AbstractClustering):
             (e.left_node, e.right_node)
             for e in chain.from_iterable(self.current_matches.values())
         ])
-
+        n_nodes = np.max(new_edges) + 1
         matrix = csr_matrix(
             (np.ones(new_edges.shape[0]),
             (new_edges[:,0], new_edges[:,1])),
-            shape=(np.max(new_edges), np.max(new_edges))
+            shape=(n_nodes, n_nodes)
         )
         _, labels = connected_components(matrix, directed=False,
                                             return_labels=True)
