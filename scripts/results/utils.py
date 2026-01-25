@@ -1,7 +1,9 @@
 """Utils for Results Generation"""
 from typing import Dict
 from itertools import product
+import pickle
 import pandas as pd
+from tqdm import tqdm
 import ray
 import ray.actor
 from rustworkx import PyGraph as Graph
@@ -9,7 +11,7 @@ from pprl.matching import Matcher
 
 from pprl.comparison_cleaning import AbstractMetablocking
 from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
-from pprl.clustering import UniqueMappingClustering, \
+from pprl.clustering import AbstractClustering, UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 def load_dataframe(path: str, files: tuple, sep: str):
@@ -166,45 +168,107 @@ def matching_ray(new_bloom: BloomEncodedData,
             thr: float, metric, configuration: dict):
     """Experiments for Matching"""
 
-    matcher = Matcher(batch_size=10_000, threshold= thr,
+    matcher = Matcher(batch_size=100_000, threshold= thr,
             metric=metric)
 
-    graph : Graph = matcher.predict(new_bloom)
-    cnt = graph.num_edges()
 
-    ev : dict = matcher.evaluate(graph, verbose = False)
-    matcher_ev = {
-        'name': f'Matching with {metric}',
-        'total_matches': cnt, 'similarity_threshold': thr}
-    for keys, items in ev.items():
-        matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
+    src, tgt, weights_list = matcher.predict(new_bloom)
 
-    matcher_ev['config'] = configuration
+    my_dict = {
+        'src': src,
+        'tgt': tgt,
+        'w_list': weights_list,
+    }
 
-    evaluations : Dict[str, list] = {}
+    with open(f"tmp/{metric}_{thr}.pkl", 'wb+') as f:
+        pickle.dump(my_dict, f)
+
+    return 0
+
+@ray.remote(num_cpus=1)
+def clustering_ray(new_bloom: BloomEncodedData,
+                   cl: AbstractClustering,
+                   graph: Graph,  metric: str, thr: float,
+                   thr_cl: float,
+                   configuration):
+    """Clustering with ray"""
+    evaluations = []
+    clustering_method : AbstractClustering = cl()
+    predicted = clustering_method.process(graph, new_bloom, thr_cl)
+    ev_cl : dict = clustering_method.evaluate(predicted, verbose=False)
+    cluster_ev = {
+        'name': f'Clustering with {cl.__name__}',
+        'total_clusters': len(predicted),
+        'clustering_threshold': thr_cl,
+        'matcher': metric,
+        'matching_thr': thr,
+    }
+
+    for keys, items in ev_cl.items():
+        cluster_ev[keys] = round(items, 2) \
+        if isinstance(items, float) else items
+    cluster_ev['config'] = configuration
+
+    evaluations.append(cluster_ev)
+    return cl.__name__, evaluations
 
 
-    for cl in [UniqueMappingClustering,
-        ConnectedComponentsClustering, KiralyMSMApproximateClustering]:
+    # clustering_name = cl.__name__
 
-        cluster = cl()
-        evaluations[cl.__name__] = []
-        for similarity_cl in range(10,100, 10):
-            thr_cl = similarity_cl / 100
-            predicted = cluster.process(graph, new_bloom, thr_cl)
-            ev_cl : dict = cluster.evaluate(predicted, verbose=False)
-            cluster_ev = {
-                'name': f'Clustering with {cl.__name__}',
-                'total_clusters': len(predicted),
-                'clustering_threshold': thr_cl,
-                'matcher': metric,
-                'matching_thr': thr,
-            }
-            for keys, items in ev_cl.items():
-                cluster_ev[keys] = round(items, 2) \
-                    if isinstance(items, float) else items
+    # cluster = cl()
+    # predicted = cluster.process(g, new_bloom, thr_cl)
 
-            cluster_ev['config'] = configuration
-            evaluations[cl.__name__].append(cluster_ev)
+    # ev_cl : dict = cluster.evaluate(predicted, verbose=False)
+    # cluster_ev = {
+    #     'name': f'Clustering with {cl.__name__}',
+    #     'total_clusters': len(predicted),
+    #     'clustering_threshold': thr_cl,
+    #     'matcher': metric,
+    #     'matching_thr': thr,
+    # }
+    # for keys, items in ev_cl.items():
+    #     cluster_ev[keys] = round(items, 2) \
+    #     if isinstance(items, float) else items
 
-    return matcher_ev, evaluations, metric
+    # cluster_ev['config'] = configuration
+    # evaluations.append(cluster_ev)
+
+    # return clustering_name, metric, evaluations
+    # cnt = graph.num_edges()
+
+    # ev : dict = matcher.evaluate(graph, verbose = False)
+    # matcher_ev = {
+    #     'name': f'Matching with {metric}',
+    #     'total_matches': cnt, 'similarity_threshold': thr}
+    # for keys, items in ev.items():
+    #     matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+    # matcher_ev['config'] = configuration
+
+    # evaluations : Dict[str, list] = {}
+
+
+    # for cl in [UniqueMappingClustering,
+    #     ConnectedComponentsClustering, KiralyMSMApproximateClustering]:
+
+    #     cluster = cl()
+    #     evaluations[cl.__name__] = []
+    #     for similarity_cl in range(10,100, 10):
+    #         thr_cl = similarity_cl / 100
+    #         predicted = cluster.process(graph, new_bloom, thr_cl)
+    #         ev_cl : dict = cluster.evaluate(predicted, verbose=False)
+    #         cluster_ev = {
+    #             'name': f'Clustering with {cl.__name__}',
+    #             'total_clusters': len(predicted),
+    #             'clustering_threshold': thr_cl,
+    #             'matcher': metric,
+    #             'matching_thr': thr,
+    #         }
+    #         for keys, items in ev_cl.items():
+    #             cluster_ev[keys] = round(items, 2) \
+    #                 if isinstance(items, float) else items
+
+    #         cluster_ev['config'] = configuration
+    #         evaluations[cl.__name__].append(cluster_ev)
+
+    # return matcher_ev, evaluations, metric

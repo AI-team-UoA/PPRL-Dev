@@ -1,0 +1,6 @@
+name,total_matches,similarity_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Matching with dice,96114581,0.05,0.0,100.0,0.0,2304,96112277,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with dice,17012790,0.15,0.01,100.0,0.03,2304,17010486,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with dice,2485242,0.25,0.09,100.0,0.19,2304,2482938,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with dice,359929,0.35,0.64,100.0,1.27,2304,357625,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with dice,61857,0.45,3.72,100.0,7.18,2304,59553,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

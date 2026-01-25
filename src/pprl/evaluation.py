@@ -1,6 +1,7 @@
 """Evaluation module
 This file contains all the methods for evaluating every module in pyjedai.
 """
+import numpy as np
 from typing import List, Tuple, Dict
 from warnings import warn
 import random
@@ -200,24 +201,41 @@ class Evaluation:
         """
         _limit = self.encoded_data.bounds[0]
         _d2_limit = self.encoded_data.bounds[1]
+        # print(clusters)
+        # all_gt_ids: set = set(range(_d2_limit))
+        entity_index = np.full(_d2_limit, -1, dtype=np.int32)
 
-        all_gt_ids: set = set(range(_d2_limit))
-
-        entity_index = {}
-        for cluster, cluster_id in zip(clusters, range(0, len(clusters))):
-            cluster_entities_d1 = 0
-            cluster_entities_d2 = 0
-            for entity_id in cluster.intersection(all_gt_ids):
-                entity_index[entity_id] = cluster_id
-
-                if entity_id < _limit:
-                    cluster_entities_d1 += 1
-                else:
-                    cluster_entities_d2 += 1
-
-            self.cm.total_matching_pairs += cluster_entities_d1*cluster_entities_d2
+        if not clusters:
+            return entity_index
+        
+        
+        cluster_lens = [len(c) for c in clusters]
+        cluster_ids_flat = np.repeat(np.arange(len(clusters)), cluster_lens)
+        entities_flat = np.concatenate([list(c) for c in clusters])
+        is_d1 = entities_flat < _limit
+        d1_counts = np.bincount(cluster_ids_flat, weights=is_d1, minlength=len(clusters))
+        d2_counts = np.array(cluster_lens) - d1_counts
+        self.cm.total_matching_pairs += int(np.sum(d1_counts * d2_counts))
+        entity_index[entities_flat] = cluster_ids_flat
 
         return entity_index
+
+        # entity_index = {}
+        # for cluster_id, cluster in enumerate(clusters):
+        #     cluster_entities_d1 = 0
+        #     cluster_entities_d2 = 0
+
+        #     for entity_id in set(cluster):
+        #         entity_index[entity_id] = cluster_id
+
+        #         if entity_id < _limit:
+        #             cluster_entities_d1 += 1
+        #         else:
+        #             cluster_entities_d2 += 1
+
+        #     self.cm.total_matching_pairs += cluster_entities_d1*cluster_entities_d2
+
+        # return entity_index
 
     def create_entity_index_from_blocks(
             self,
