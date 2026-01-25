@@ -1,6 +1,8 @@
 """
 Docstring for pprl.clustering
 """
+
+import numpy as np
 from tqdm.autonotebook import tqdm
 import pandas as pd
 from pprl.datamodel import PPRLFeature
@@ -762,11 +764,22 @@ class AbstractClustering(PPRLFeature):
         entity_index = eval_obj.create_entity_index_from_clusters(eval_blocks)
 
 
-        for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
-            id2 += self.encoded_data.bounds[0]
-            if id1 in entity_index and    \
-                id2 in entity_index and entity_index[id1] == entity_index[id2]:
-                true_positives += 1
+        id1_arr = self.encoded_data.ground_truth.iloc[:,0].values
+        id2_arr = self.encoded_data.ground_truth.iloc[:,1].values + self.encoded_data.bounds[0]
+
+        clusters_1 = entity_index[id1_arr]
+        clusters_2 = entity_index[id2_arr]
+
+        true_positives = int(np.count_nonzero((clusters_1 == clusters_2 ) & (clusters_1 != -1)))
+
+        # true_positives
+
+
+        # for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
+        #     id2 += self.encoded_data.bounds[0]
+        #     if id1 in entity_index and    \
+        #         id2 in entity_index and entity_index[id1] == entity_index[id2]:
+        #         true_positives += 1
         eval_obj.calculate_scores(true_positives=true_positives)
         return eval_obj.report(self.method_configuration(),
                                 export_to_df,

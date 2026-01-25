@@ -1,12 +1,16 @@
 """
 Docstring for pprl.clustering
 """
+from __future__ import annotations
 from queue import PriorityQueue
 from collections import defaultdict
 from time import time
 from typing import Dict, List
-from rustworkx import PyGraph as Graph, connected_components
-# from networkx import Graph, connected_components
+from itertools import chain
+from scipy.sparse import csr_matrix
+from scipy.sparse.csgraph import connected_components
+from rustworkx import PyGraph as Graph
+import numpy as np
 from ordered_set import OrderedSet
 from pprl.encoded_data import BloomEncodedData
 from pprl.base_clustering import AbstractClustering, ExtendedSimilarityEdge
@@ -19,6 +23,7 @@ class ConnectedComponentsClustering(AbstractClustering):
         Input graph consists of the entity ids (nodes) and the similarity scores (edges).
     """
 
+
     _method_name: str = "Connected Components Clustering"
     _method_short_name: str = "CCC"
     _method_info: str = "Gets equivalence clusters from the " + \
@@ -27,6 +32,7 @@ class ConnectedComponentsClustering(AbstractClustering):
     def __init__(self) -> None:
         super().__init__()
         self.similarity_threshold: float
+
 
     def process(self, graph: Graph, encoded_data: BloomEncodedData,
             similarity_threshold: float = None) -> list:
@@ -41,15 +47,98 @@ class ConnectedComponentsClustering(AbstractClustering):
         start_time = time()
         self.encoded_data = encoded_data
         self.similarity_threshold: float = similarity_threshold
-        graph_copy = graph.copy()
+
+        valid_array : np.ndarray
         if self.similarity_threshold is not None:
-            for (u,v, weight) in graph.weighted_edge_list():
-                if weight < self.similarity_threshold:
-                    graph_copy.remove_edge(u,v)
-        clusters = list(connected_components(graph_copy))
-        resulting_clusters = list(filter(lambda x: len(x) == 2, clusters))
+            all_edges = np.array(graph.edge_list())
+            all_weights = np.array(graph.edges())
+            mask = all_weights >= self.similarity_threshold
+            valid_array = all_edges[mask]
+        else:
+            valid_array = np.array(graph.edge_list())
+
+        n_nodes = graph.num_nodes()
+
+        resulting_clusters = self.scipi_connected_components(
+            edges=valid_array,
+            n_nodes=n_nodes
+        )
+
         self.execution_time = time() - start_time
         return resulting_clusters
+
+    @staticmethod
+    def scipi_connected_components(edges:np.array, n_nodes: int) -> list:
+        """Scipy Connected Components Algorithm in the produced graph.
+
+        Args:
+            edges (np.array): Consists of the entity ids (nodes) and the similarity scores (edges).
+        Returns:
+            list: list of clusters
+        """
+
+        if len(edges) == 0:
+            return []
+
+
+        matrix = csr_matrix(
+            (np.ones(len(edges)),
+            (edges[:,0], edges[:,1])),
+            shape=(n_nodes, n_nodes)
+        )
+        _, labels = connected_components(matrix, directed=False,
+                                            return_labels=True)
+        unique_labels, counts = np.unique(labels, return_counts=True)
+
+        # 3. Identify labels that strictly have size == 2
+        # valid_labels is a boolean mask of the unique_labels
+        valid_mask = (counts == 2)
+        valid_component_ids = unique_labels[valid_mask]
+
+        # 4. Filter the nodes
+        # 'np.isin' checks which nodes belong to the valid components.
+        # We essentially discard all nodes that are part of clusters != 2
+        node_mask = np.isin(labels, valid_component_ids)
+
+        # We need the indices of the nodes, not just the boolean mask
+        # We sort them by label to ensure the pairs stay together
+        valid_node_indices = np.where(node_mask)[0]
+        valid_node_labels = labels[valid_node_indices]
+
+        # Sort by label so that pairs are adjacent in the array
+        # e.g. [nodeA, nodeB, nodeC, nodeD] where A&B are comp 1, C&D are comp 5
+        sort_order = np.argsort(valid_node_labels)
+        sorted_nodes = valid_node_indices[sort_order]
+
+        # 5. Reshape into pairs (The Magic Step)
+        # Since we filtered for ONLY size 2, the length of sorted_nodes
+        # must be even. We can reshape directly into a list of pairs.
+        # This is instantaneous compared to a loop.
+        result_matrix = sorted_nodes.reshape(-1, 2)
+        # sorted_idx = np.argsort(labels)
+        # sorted_labels = labels[sorted_idx]
+
+        # # Find where the label changes to identify cluster boundaries
+        # # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
+        # split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
+
+        # # Split the original node indices into arrays based on these boundaries
+        # clusters = np.split(sorted_idx, split_idx)
+
+        # # 4. Filter for clusters of size 2
+        # # This list comprehension is now iterating over CLUSTERS, not NODES
+        # # (e.g., 500k iterations instead of 100M)
+        # resulting_clusters = [c.tolist() for c in clusters if len(c) == 2]
+
+        # clusters = [[] for _ in range(n_components)]
+        # for node_index, component_index in enumerate(labels):
+        #     clusters[component_index].append(node_index)
+
+        # resulting_clusters = [c for c in clusters if len(c) == 2]
+
+        return result_matrix.tolist()
+
+
 
 class UniqueMappingClustering(AbstractClustering):
     """Prunes all edges with a weight lower than t, sorts the remaining ones in
@@ -57,7 +146,6 @@ class UniqueMappingClustering(AbstractClustering):
         the top-weighted pair as long as none of its entities has already
         been matched to some other.
     """
-
     _method_name: str = "Unique Mapping Clustering"
     _method_short_name: str = "UMC"
     _method_info: str = "Prunes all edges with a weight lower than t, \
@@ -90,25 +178,35 @@ class UniqueMappingClustering(AbstractClustering):
         self.similarity_threshold: float = similarity_threshold
 
         start_time = time()
-        matched_entities = OrderedSet()
         self.encoded_data = encoded_data
-        new_graph = Graph()
-        new_graph.add_nodes_from(range(self.encoded_data.bounds[1]))
-        priority_queue = PriorityQueue(maxsize = graph.num_edges()*2)
-        for (u, v, weight) in graph.weighted_edge_list():
-            if weight > self.similarity_threshold:
-                priority_queue.put_nowait((1 - weight, u, v))
 
-        while not priority_queue.empty():
-            sim, entity_1, entity_2 = priority_queue.get()
-            if entity_1 in matched_entities or entity_2 in matched_entities:
-                continue
-            new_graph.add_edge(entity_1, entity_2, sim)
-            matched_entities.add(entity_1)
-            matched_entities.add(entity_2)
+        all_edges_with_weights = np.array(graph.weighted_edge_list())
+        mask = all_edges_with_weights[:, 2] >= self.similarity_threshold
+        valid_array = all_edges_with_weights[mask]
 
-        clusters = ConnectedComponentsClustering().process(new_graph,
-                        encoded_data, similarity_threshold=None)
+        u = valid_array[:,0]
+        v = valid_array[:,1]
+        w = valid_array[:,2]
+
+        sort_indices = np.lexsort((v,u,-w))
+        candidates = valid_array[sort_indices]
+
+        candidates = candidates[:graph.num_edges()*2, :2]
+
+        seen = set()
+        unique_edge_indices = []
+        for i, (u,v) in enumerate(candidates):
+            if u not in seen and v not in seen:
+                seen.add(u)
+                seen.add(v)
+                unique_edge_indices.append(i)
+
+        unique_edges = candidates[unique_edge_indices]
+
+        clusters = ConnectedComponentsClustering.scipi_connected_components(
+            edges=unique_edges,
+            n_nodes=graph.num_nodes()
+        )
         self.execution_time = time() - start_time
         return clusters
 
@@ -234,10 +332,14 @@ class KiralyMSMApproximateClustering(AbstractClustering):
     fiances : list
     current_matches: dict
     free_men : list
+    men : set
+    base_candidates : dict
 
     def __init__(self) -> None:
         super().__init__()
         self.similarity_threshold : float
+        self.men_candidates = None
+        self.women_candidates = None
 
     def process(self,
         graph: Graph,
@@ -266,28 +368,48 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         if number_of_comparisons == 0:
             return clusters
 
-        new_graph : Graph = Graph()
-        new_graph.add_nodes_from(range(self.encoded_data.bounds[1]))
+
         men : set = set()
-        self.men_candidates : dict = defaultdict(list)
-        self.women_candidates : dict = defaultdict(list)
+        if self.men_candidates is None:
+            self.men_candidates : dict = defaultdict(list)
+            self.women_candidates : dict = defaultdict(list)
 
-        for (u, v, weight) in graph.weighted_edge_list():
-            man, woman = self.sorted_indicators(u, v)
-            similarity = weight
-            if similarity > self.similarity_threshold:
-                self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
-                                                                right_node=woman,
-                                                                similarity=similarity))
-                self.women_candidates[woman].append(ExtendedSimilarityEdge(left_node=woman,
-                                                                    right_node=man,
+            for (u, v, weight) in graph.weighted_edge_list():
+                man, woman = self.sorted_indicators(u, v)
+                similarity = weight
+                if similarity > self.similarity_threshold:
+                    self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
+                                                                    right_node=woman,
                                                                     similarity=similarity))
-            men.add(man)
+                    self.women_candidates[woman].append(ExtendedSimilarityEdge(left_node=woman,
+                                                                        right_node=man,
+                                                                        similarity=similarity))
+                men.add(man)
+            self.men = men
+            self.base_candidates = {}
+            for man, candidates in self.men_candidates.items():
+                self.men_candidates[man] = sorted(candidates, reverse=True)
+                self.base_candidates[man] = self.men_candidates[man].copy()
+            for woman, candidates in self.women_candidates.items():
+                self.women_candidates[woman] = sorted(candidates, reverse=True)
+                self.base_candidates[woman] = self.women_candidates[woman].copy()
 
-        for man, candidates in self.men_candidates.items():
-            self.men_candidates[man] = sorted(candidates, reverse=True)
-        for woman, candidates in self.women_candidates.items():
-            self.women_candidates[woman] = sorted(candidates, reverse=True)
+        else:
+            men = self.men
+            self.men_candidates : dict = defaultdict(list)
+            self.women_candidates : dict = defaultdict(list)
+            for key, candidates in self.base_candidates.items():
+                for e in candidates:
+                    if e.similarity > self.similarity_threshold:
+                        e.active = True
+                        if key < self.encoded_data.bounds[0]:
+                            self.men_candidates[key].append(e)
+                        else:
+                            self.women_candidates[key].append(e)
+                    else:
+                        break
+
+
 
         self.is_bachelor : list = [False] * self.encoded_data.bounds[0]
         self.is_uncertain : list = [False] * self.encoded_data.bounds[0]
@@ -323,12 +445,34 @@ class KiralyMSMApproximateClustering(AbstractClustering):
                     else:
                         self.deactivate_candidate(entity=man, candidate=woman)
 
-        for _, edges in self.current_matches.items():
-            for edge in edges:
-                man, woman, similarity = edge.left_node, edge.right_node, edge.similarity
-                new_graph.add_edge(man, woman, similarity)
+        edges = np.array([
+            (e.left_node, e.right_node)
+            for e in chain.from_iterable(self.current_matches.values())
+        ])
 
-        clusters = list(connected_components(new_graph))
+        matrix = csr_matrix(
+            (np.ones(len(edges)),
+            (edges[:,0], edges[:,1])),
+            shape=(self.encoded_data.bounds[1], self.encoded_data.bounds[1])
+        )
+        _, labels = connected_components(matrix, directed=False,
+                                            return_labels=True)
+
+
+        sorted_idx = np.argsort(labels)
+        sorted_labels = labels[sorted_idx]
+
+        # Find where the label changes to identify cluster boundaries
+        # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
+        split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
+
+        # Split the original node indices into arrays based on these boundaries
+        clusters = np.split(sorted_idx, split_idx)
+        # clusters = [[] for _ in range(n_components)]
+        # for node_index, component_index in enumerate(labels):
+        #     clusters[component_index].append(node_index)
+
+        # clusters = list(connected_components(new_graph))
         self.execution_time = time() - start_time
         return clusters
 
