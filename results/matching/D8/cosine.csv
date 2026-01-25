@@ -239,3 +239,8 @@ Matching with cosine,46993642,0.3,0.0,99.88,0.0,852,46992790,23768,1,"{'attribut
 Matching with cosine,56266128,0.15,0.0,100.0,0.0,853,56265275,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 13, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
 Matching with cosine,56361474,0.05,0.0,100.0,0.0,853,56360621,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 13, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
 Matching with cosine,36015330,0.35,0.0,99.77,0.0,851,36014479,23767,2,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 13, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,56058294,0.15,0.0,100.0,0.0,853,56057441,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 11, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,54413856,0.2,0.0,99.88,0.0,852,54413004,23768,1,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 11, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,56361284,0.05,0.0,100.0,0.0,853,56360431,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 12, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,56348401,0.1,0.0,100.0,0.0,853,56347548,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 12, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with cosine,56197862,0.15,0.0,100.0,0.0,853,56197009,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 12, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

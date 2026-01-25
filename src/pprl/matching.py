@@ -266,7 +266,7 @@ class Matcher(PPRLFeature):
         src_ids = unique_ids_arr[valid_pairs[:, 0]]
         tgt_ids = unique_ids_arr[valid_pairs[:, 1]]
 
-        return src_ids.tolist(), tgt_ids.tolist(), valid_scores.tolist()
+        return src_ids, tgt_ids, valid_scores
 
     def _predict_create_bloom_matrix(self, attributes: list,
                             encoded_data: BloomEncodedData) -> np.array:
@@ -311,7 +311,7 @@ class Matcher(PPRLFeature):
             else encoded_data.attributes
 
         n_candidates = 0
-        graph = Graph()
+        # graph = Graph()
         #TODO: Check this after experiments
         if self.matcher_config.unique_ids:
             id_to_idx = {eid: idx \
@@ -321,19 +321,20 @@ class Matcher(PPRLFeature):
             idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
                                 for eid1, eid2 in self.matcher_config.candidates])
             n_candidates = len(idx_pairs)
-            graph.add_nodes_from([None] * len(id_to_idx))
+            # graph.add_nodes_from([None] * len(id_to_idx))
         else:
             is_dense = True
             unique_ids_arr = np.arange(0, self.encoded_data.bounds[1])
             ids_1 = self.encoded_data.bounds[0]
             ids_2 = self.encoded_data.bounds[1] - ids_1
             n_candidates = ids_1 * ids_2
-            graph.add_nodes_from([None] * n_candidates)
+            # graph.add_nodes_from([None] * n_candidates)
 
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
 
-
+        edges_list = []
+        edges_weights_list = []
         for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
                     desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
@@ -346,16 +347,20 @@ class Matcher(PPRLFeature):
                 batch_pairs=idx_pairs[start:end]
             src, tgt, weights = self._predict_batches(batch_pairs,
                                 bloom_matrix, unique_ids_arr)
+            edges_list.append(np.column_stack((src, tgt)))
+            edges_weights_list.append(weights)
+            # print(src)
+            # print(tgt)
+            # print(weights)
+            # edges = np.concatenate(
+            #     [edges, np.column_stack((src, tgt, weights))], axis=0)
+            # print(edges)
+            # exit(10)
 
-
-            if src is not None and len(src) > 0:
-                edges_list = list(zip(src, tgt, weights))
-                graph.add_edges_from(edges_list)
-
-        return graph
+        return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
     def evaluate(self,
-                prediction : Graph,
+                prediction : np.array,
                 export_to_df: bool = False,
                 with_classification_report: bool = False,
                 verbose: bool = True) -> any:
@@ -366,10 +371,11 @@ class Matcher(PPRLFeature):
         if self.encoded_data.skip_ground_truth:
             raise AttributeError("Can not proceed to evaluation without a ground-truth file. " +
                     "Encoded Data object the ground-truth file has not been set.")
-
+        edges, _ = prediction
         eval_obj = Evaluation(self.encoded_data)
         true_positives = 0
-        total_matching_pairs = prediction.num_edges()
+        total_matching_pairs = edges.shape[0]
+        # total_matching_pairs = prediction.num_edges()
 
 
         id1_arr = self.encoded_data.ground_truth.iloc[:, 0].values
@@ -384,11 +390,17 @@ class Matcher(PPRLFeature):
             id1_arr = replace_func(id1_arr)
             id2_arr = replace_func(id2_arr)
 
-        true_positives = 0
-        for i, id1 in enumerate(id1_arr):
-            id2 = id2_arr[i]
-            if prediction.has_edge(id1, id2):
-                true_positives += 1
+        gt_pairs = np.column_stack((id1_arr, id2_arr))
+
+        def as_void(arr):
+            return arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
+        matches = np.intersect1d(as_void(edges), as_void(gt_pairs))
+        true_positives = matches.shape[0]
+        # true_positives = 0
+        # for i, id1 in enumerate(id1_arr):
+        #     id2 = id2_arr[i]
+        #     if prediction.has_edge(id1, id2):
+        #         true_positives += 1
 
         eval_obj.calculate_scores(true_positives=true_positives,
                                   total_matching_pairs=total_matching_pairs)

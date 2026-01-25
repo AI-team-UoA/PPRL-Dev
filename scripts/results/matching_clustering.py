@@ -1,6 +1,6 @@
 """Matching & Clustering Results """
 from __future__ import annotations
-
+import ast
 import os
 import pandas as pd
 from tqdm import tqdm
@@ -17,12 +17,12 @@ from pprl.clustering import AbstractClustering, UniqueMappingClustering, \
 if __name__ == '__main__':
 
 
-    DIR = "D9"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'scholarclean'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
     attributes = [['title']]
-    SEP = ">"
+    SEP = "|"
 
 
     # DIR = "D2"
@@ -45,18 +45,77 @@ if __name__ == '__main__':
     TOTAL_LENGTH = 32
     futures = []
     MAX_CONCURRENCY = 24
-    CLUSTER_MAX_CONCURRENCY = 3
+    CLUSTER_MAX_CONCURRENCY = 5
 
 
     adjacent_config = {}
-    matching_dict = {}
-    matching_dict['dice'] = {
-        'matching': {1 : [0.05, 0.15, 0.25, 0.35, 0.45]},
-        'ConnectedComponentsClustering': {1 : [0.05, 0.15, 0.25, 0.35]},
-        'UniqueMappingClustering': {1 : [0.05, 0.15, 0.25]},
-        'KiralyMSMApproximateClustering': {1 : [0.05, 0.15, 0.25, 0.35]},
-        'skip': {1 : [0.05, 0.15, 0.25, 0.35]}
-    }
+
+    matched_done = set()
+    clustered_done = set()
+    skip = set()
+    for metric in ['dice', 'jaccard', 'cosine']:
+        matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
+        matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
+        matching_df['metric'] = metric
+        matching_df['num_hashes'] = matching_df['config'].apply(lambda x: x['num_hashes'])
+        list_done = set(zip(
+            matching_df['metric'],
+            matching_df['num_hashes'],
+            matching_df['similarity_threshold']))
+        matched_done.update(list_done)
+        max_num_hashes = matching_df['num_hashes'].max()
+
+
+        def clustering_done_list(clustering_method: str):
+            filename = f"{clustering_method}_{metric}.csv"
+            if not os.path.exists(f"{RESULTS_CLUSTERING}/{filename}"):
+                return False
+            clustering_df = pd.read_csv(f"{RESULTS_CLUSTERING}/"
+                f"{clustering_method}_{metric}.csv")
+            clustering_df['config'] = clustering_df['config'].apply(
+                ast.literal_eval)
+            clustering_df['num_hashes'] = clustering_df['config'].apply(
+                lambda x: x['num_hashes'])
+            clustering_df['method'] = clustering_method
+            list_done_cl = set(zip(
+                    clustering_df['method'],
+                    clustering_df['matcher'],
+                    clustering_df['num_hashes'],
+                    clustering_df['matching_thr'],
+                    clustering_df['clustering_threshold']))
+            return list_done_cl
+
+
+        for hashing in range(1, max_num_hashes + 1):
+            flag = True
+            for similarity in range(5, 100, 5):
+                if flag == False:
+                    break
+                if (metric, hashing, similarity / 100) not in matched_done:
+                    flag = False
+                    break
+                for cl_method in [
+                    'ConnectedComponentsClustering',
+                    'UniqueMappingClustering',
+                    'KiralyMSMApproximateClustering']:
+                    cl_done = clustering_done_list(cl_method)
+                    clustered_done.update(cl_done if cl_done else set())
+                    if flag == False:
+                        continue
+                    if cl_done:
+                        for cl_similarity in range(10, 100, 10):
+                            if (cl_method, metric, hashing,
+                                similarity / 100,
+                                cl_similarity / 100) not in cl_done:
+                                flag = False
+                                break
+                    else:
+                        flag = False
+                        break
+            if flag:
+                skip.add((metric, hashing))
+
+
 
     if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
@@ -68,40 +127,43 @@ if __name__ == '__main__':
                 BLOOM_NAME, loaded_dataframe, adjacent_config),
         total=TOTAL_LENGTH):
 
+
         new_bloom_ref = ray.put(new_bloom)
         for metric in ['dice', 'jaccard', 'cosine']:
+            if (metric, configuration['num_hashes']) in skip:
+                continue
             print(f"Running for {metric}")
             graph = None
             for similarity in range(5,100,5):
-                if metric in matching_dict and \
-                    configuration['num_hashes'] in matching_dict[metric] \
-                    ['skip'] and \
-                    similarity/100 in matching_dict[metric] \
-                    ['skip'][configuration['num_hashes']]:
-                    continue
                 thr = similarity / 100
                 if graph is None:
                     matcher = Matcher(batch_size=10_000, threshold=thr, metric=metric)
-                    graph : Graph = matcher.predict(new_bloom)
+                    graph = matcher.predict(new_bloom)
                 else:
-                    filter_edges = graph.filter_edges(lambda w, l_thr=thr: w < l_thr)
+                    edges, weights = graph
+                    mask = thr <= weights
+                    edges = edges[mask]
+                    weights = weights[mask]
+                    graph = edges, weights
                     matcher.matcher_config.threshold = thr
-                    for edge_index in filter_edges:
-                        graph.remove_edge_from_index(edge_index)
-                ev = matcher.evaluate(graph, verbose=False)
-                matcher_ev = {
-                    'name': f'Matching with {metric}',
-                    'total_matches': graph.num_edges(),
-                    'similarity_threshold': thr}
-                for keys, items in ev.items():
-                    matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
 
-                matcher_ev['config'] = configuration
-                filename = f"{metric}.csv"
-                loaded = os.path.exists(f"{RESULTS}/{filename}")
-                df = pd.DataFrame([matcher_ev])
-                df.to_csv(f'{RESULTS}/{filename}',
-                mode='a+', index=False, header=not loaded)
+                if (metric, configuration['num_hashes'], similarity / 100) not in matched_done:
+
+                    edges, _ = graph
+                    ev = matcher.evaluate(graph, verbose=True)
+                    matcher_ev = {
+                        'name': f'Matching with {metric}',
+                        'total_matches': edges.shape[0],
+                        'similarity_threshold': thr}
+                    for keys, items in ev.items():
+                        matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+                    matcher_ev['config'] = configuration
+                    filename = f"{metric}.csv"
+                    loaded = os.path.exists(f"{RESULTS}/{filename}")
+                    df = pd.DataFrame([matcher_ev])
+                    df.to_csv(f'{RESULTS}/{filename}',
+                    mode='a+', index=False, header=not loaded)
 
                 graph_ref = ray.put(graph)
                 futures = []
@@ -112,6 +174,11 @@ if __name__ == '__main__':
                     for cl_similarity in tqdm(range(10, 100, 10),
                         desc=f"Clustering {cl.__name__}",
                         total=9):
+                        if (cl.__name__, metric,
+                            configuration['num_hashes'],
+                            thr,
+                            cl_similarity / 100) in clustered_done:
+                            continue
                         thr_cl = cl_similarity / 100
                         future = clustering_ray.remote(
                             new_bloom_ref, cl,

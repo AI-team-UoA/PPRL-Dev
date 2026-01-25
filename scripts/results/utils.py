@@ -188,7 +188,7 @@ def matching_ray(new_bloom: BloomEncodedData,
 @ray.remote(num_cpus=1)
 def clustering_ray(new_bloom: BloomEncodedData,
                    cl: AbstractClustering,
-                   graph: Graph,  metric: str, thr: float,
+                   graph: tuple,  metric: str, thr: float,
                    thr_cl: float,
                    configuration):
     """Clustering with ray"""

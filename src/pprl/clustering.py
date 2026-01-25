@@ -5,7 +5,7 @@ from __future__ import annotations
 from queue import PriorityQueue
 from collections import defaultdict
 from time import time
-from typing import Dict, List
+from typing import Dict, List, Tuple
 from itertools import chain
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
@@ -34,7 +34,7 @@ class ConnectedComponentsClustering(AbstractClustering):
         self.similarity_threshold: float
 
 
-    def process(self, graph: Graph, encoded_data: BloomEncodedData,
+    def process(self, graph: tuple, encoded_data: BloomEncodedData,
             similarity_threshold: float = None) -> list:
         """NetworkX Connected Components Algorithm in the produced graph.
 
@@ -44,20 +44,24 @@ class ConnectedComponentsClustering(AbstractClustering):
         Returns:
             list: list of clusters
         """
+        edges: np.array
+        weights: np.array
+
         start_time = time()
         self.encoded_data = encoded_data
         self.similarity_threshold: float = similarity_threshold
 
+        edges, weights = graph
         valid_array : np.ndarray
         if self.similarity_threshold is not None:
-            all_edges = np.array(graph.edge_list())
-            all_weights = np.array(graph.edges())
+            all_edges = edges
+            all_weights = weights
             mask = all_weights >= self.similarity_threshold
             valid_array = all_edges[mask]
         else:
-            valid_array = np.array(graph.edge_list())
+            valid_array = edges
 
-        n_nodes = graph.num_nodes()
+        n_nodes = np.unique(edges).shape[0]
 
         resulting_clusters = self.scipi_connected_components(
             edges=valid_array,
@@ -165,7 +169,7 @@ class UniqueMappingClustering(AbstractClustering):
         super().__init__()
         self.similarity_threshold: float
 
-    def process(self, graph: Graph, encoded_data: BloomEncodedData,
+    def process(self, graph: Tuple[np.array, np.array], encoded_data: BloomEncodedData,
             similarity_threshold: float = 0.1) -> list:
         """NetworkX Connected Components Algorithm in the produced graph.
 
@@ -180,18 +184,20 @@ class UniqueMappingClustering(AbstractClustering):
         start_time = time()
         self.encoded_data = encoded_data
 
-        all_edges_with_weights = np.array(graph.weighted_edge_list())
-        mask = all_edges_with_weights[:, 2] >= self.similarity_threshold
-        valid_array = all_edges_with_weights[mask]
+        edges, weights = graph
 
-        u = valid_array[:,0]
-        v = valid_array[:,1]
-        w = valid_array[:,2]
+        mask = weights >= self.similarity_threshold
+        valid_edges = edges[mask]
+        valid_weights = weights[mask]
 
-        sort_indices = np.lexsort((v,u,-w))
-        candidates = valid_array[sort_indices]
+        u = valid_edges[:,0]
+        v = valid_edges[:,1]
+        w = valid_weights
 
-        candidates = candidates[:graph.num_edges()*2, :2]
+        sort_indices = np.lexsort((v, u, -w))
+        candidates = valid_edges[sort_indices]
+
+        candidates = candidates[:edges.shape[0]*2]
 
         seen = set()
         unique_edge_indices = []
@@ -205,7 +211,7 @@ class UniqueMappingClustering(AbstractClustering):
 
         clusters = ConnectedComponentsClustering.scipi_connected_components(
             edges=unique_edges,
-            n_nodes=graph.num_nodes()
+            n_nodes=np.unique(edges).shape[0]
         )
         self.execution_time = time() - start_time
         return clusters
@@ -342,7 +348,7 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         self.women_candidates = None
 
     def process(self,
-        graph: Graph,
+        graph: Tuple[np.array, np.array],
         encoded_data: BloomEncodedData,
         similarity_threshold: float = 0.1) -> list:
         """
@@ -359,24 +365,25 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         :rtype: list
         """
 
+        edges, weights = graph
+
         start_time = time()
         self.similarity_threshold : float = similarity_threshold
         self.encoded_data = encoded_data
-        number_of_comparisons : int = len(graph.edge_list())
+        number_of_comparisons : int = edges.shape[0]
         clusters : list = []
 
         if number_of_comparisons == 0:
             return clusters
-
 
         men : set = set()
         if self.men_candidates is None:
             self.men_candidates : dict = defaultdict(list)
             self.women_candidates : dict = defaultdict(list)
 
-            for (u, v, weight) in graph.weighted_edge_list():
+            for i, (u,v) in enumerate(edges):
                 man, woman = self.sorted_indicators(u, v)
-                similarity = weight
+                similarity = weights[i]
                 if similarity > self.similarity_threshold:
                     self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
                                                                     right_node=woman,
@@ -445,14 +452,14 @@ class KiralyMSMApproximateClustering(AbstractClustering):
                     else:
                         self.deactivate_candidate(entity=man, candidate=woman)
 
-        edges = np.array([
+        new_edges = np.array([
             (e.left_node, e.right_node)
             for e in chain.from_iterable(self.current_matches.values())
         ])
 
         matrix = csr_matrix(
-            (np.ones(len(edges)),
-            (edges[:,0], edges[:,1])),
+            (np.ones(new_edges.shape[0]),
+            (new_edges[:,0], new_edges[:,1])),
             shape=(self.encoded_data.bounds[1], self.encoded_data.bounds[1])
         )
         _, labels = connected_components(matrix, directed=False,
