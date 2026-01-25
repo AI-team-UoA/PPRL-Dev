@@ -259,3 +259,4 @@ Matching with jaccard,179,0.9,52.51,11.02,18.22,94,85,23010,759,"{'attributes': 
 Matching with jaccard,362,0.85,41.71,17.7,24.86,151,211,23067,702,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 14, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
 Matching with jaccard,90,0.95,62.22,6.57,11.88,56,34,22972,797,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 14, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
 Matching with jaccard,26257717,0.25,0.0,99.18,0.01,846,26256871,23762,7,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 14, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with jaccard,55782020,0.1,0.0,100.0,0.0,853,55781167,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 13, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
