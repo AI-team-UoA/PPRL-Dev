@@ -17,12 +17,12 @@ from pprl.clustering import AbstractClustering, UniqueMappingClustering, \
 if __name__ == '__main__':
 
 
-    DIR = "D8"
+    DIR = "D9"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
+    FILE = 'dblpclean'
+    FILE2 = 'scholarclean'
     attributes = [['title']]
-    SEP = "|"
+    SEP = ">"
 
 
     # DIR = "D2"
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     matched_done = set()
     clustered_done = set()
     skip = set()
-    for metric in ['dice', 'jaccard', 'cosine']:
+    for metric in ['dice']:
         matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
         matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
         matching_df['metric'] = metric
@@ -196,15 +196,15 @@ if __name__ == '__main__':
                                 df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
                                 mode='a+', index=False, header=not loaded)
 
-                while futures:
-                    finished, futures = ray.wait(
-                        futures, num_returns=1)
-                    for done in finished:
-                        clustering_name, evaluations = ray.get(done)
-                        filename = f"{clustering_name}_{metric}.csv"
-                        loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{filename}")
-                        df = pd.DataFrame(evaluations)
-                        df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
-                        mode='a+', index=False, header=not loaded)
+    while futures:
+        finished, futures = ray.wait(
+            futures, num_returns=1)
+        for done in finished:
+            clustering_name, evaluations = ray.get(done)
+            filename = f"{clustering_name}_{metric}.csv"
+            loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{filename}")
+            df = pd.DataFrame(evaluations)
+            df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
+            mode='a+', index=False, header=not loaded)
 
     print(f"Finished {DIR}")

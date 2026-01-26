@@ -6,7 +6,6 @@ import pandas as pd
 from tqdm import tqdm
 import ray
 import ray.actor
-from rustworkx import PyGraph as Graph
 from pprl.matching import Matcher
 
 from pprl.comparison_cleaning import AbstractMetablocking
