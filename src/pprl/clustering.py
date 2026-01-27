@@ -9,9 +9,8 @@ from typing import Dict, List, Tuple
 from itertools import chain
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-from rustworkx import PyGraph as Graph
+# from rustworkx import PyGraph as Graph
 import numpy as np
-from ordered_set import OrderedSet
 from pprl.encoded_data import BloomEncodedData
 from pprl.base_clustering import AbstractClustering, ExtendedSimilarityEdge
 
