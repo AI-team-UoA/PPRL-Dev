@@ -45,7 +45,7 @@ if __name__ == '__main__':
     TOTAL_LENGTH = 32
     futures = []
     MAX_CONCURRENCY = 24
-    CLUSTER_MAX_CONCURRENCY = 5
+    CLUSTER_MAX_CONCURRENCY = 3
 
 
     adjacent_config = {}
@@ -53,7 +53,7 @@ if __name__ == '__main__':
     matched_done = set()
     clustered_done = set()
     skip = set()
-    for metric in ['dice']:
+    for metric in ['dice', 'jaccard', 'cosine']:
         matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
         matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
         matching_df['metric'] = metric
@@ -150,7 +150,7 @@ if __name__ == '__main__':
                 if (metric, configuration['num_hashes'], similarity / 100) not in matched_done:
 
                     edges, _ = graph
-                    ev = matcher.evaluate(graph, verbose=True)
+                    ev = matcher.evaluate(graph, verbose=False)
                     matcher_ev = {
                         'name': f'Matching with {metric}',
                         'total_matches': edges.shape[0],
@@ -169,7 +169,7 @@ if __name__ == '__main__':
                 futures = []
                 for cl in [ConnectedComponentsClustering,
                         KiralyMSMApproximateClustering,
-                        UniqueMappingClustering]:
+                    UniqueMappingClustering]:
 
                     for cl_similarity in tqdm(range(10, 100, 10),
                         desc=f"Clustering {cl.__name__}",
@@ -196,15 +196,15 @@ if __name__ == '__main__':
                                 df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
                                 mode='a+', index=False, header=not loaded)
 
-    while futures:
-        finished, futures = ray.wait(
-            futures, num_returns=1)
-        for done in finished:
-            clustering_name, evaluations = ray.get(done)
-            filename = f"{clustering_name}_{metric}.csv"
-            loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{filename}")
-            df = pd.DataFrame(evaluations)
-            df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
-            mode='a+', index=False, header=not loaded)
+                while futures:
+                    finished, futures = ray.wait(
+                        futures, num_returns=1)
+                    for done in finished:
+                        clustering_name, evaluations = ray.get(done)
+                        filename = f"{clustering_name}_{metric}.csv"
+                        loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{filename}")
+                        df = pd.DataFrame(evaluations)
+                        df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
+                        mode='a+', index=False, header=not loaded)
 
     print(f"Finished {DIR}")
