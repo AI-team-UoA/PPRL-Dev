@@ -3,6 +3,7 @@ import uuid
 from abc import ABC
 from typing import List, Tuple, Dict
 import numpy as np
+import cupy as cp
 from networkx import Graph
 from pprl.datamodel import Block
 
@@ -74,7 +75,22 @@ def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> f
 
 
 
-def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
+def _dice(blooms_1 : np.array, blooms_2 : np.array, gpu_on = False) -> np.array:
+    if gpu_on:
+        intersection_bytes = cp.bitwise_and(blooms_1, blooms_2)
+        intersections = intersection_bytes.sum(axis=2)
+
+        card_1 = cp.sum(blooms_1, axis=2)  # (n_candidates, n_attributes)
+        card_2 = cp.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
+
+        denominators = card_1 + card_2
+        dice_scores = cp.zeros_like(intersections, dtype=cp.float64)
+        valid_mask = denominators > 0
+        dice_scores[valid_mask] = (2 * intersections[valid_mask]) / denominators[valid_mask]
+        avg_similarities = cp.mean(dice_scores, axis=1)
+
+        return avg_similarities
+
 
     intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
     intersections = intersection_bytes.sum(axis=2)
@@ -90,7 +106,22 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
 
     return avg_similarities
 
-def _jaccard(blooms_1: np.array, blooms_2: np.array):
+def _jaccard(blooms_1: np.array, blooms_2: np.array, gpu_on = False):
+    if gpu_on:
+        intersection_bytes = cp.bitwise_and(blooms_1, blooms_2)
+        intersections = intersection_bytes.sum(axis=2)
+
+        # 2. Cardinalities (Count of True)
+        card_1 = cp.sum(blooms_1, axis=2)
+        card_2 = cp.sum(blooms_2, axis=2)
+
+        union = card_1 + card_2 - intersections
+        scores = cp.zeros_like(intersections, dtype=cp.float64)
+        mask = union > 0
+        scores[mask] = intersections[mask] / union[mask]
+        avg_similarities = cp.mean(scores, axis=1)
+        return avg_similarities
+
     intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
     intersections = intersection_bytes.sum(axis=2)
 
@@ -105,7 +136,22 @@ def _jaccard(blooms_1: np.array, blooms_2: np.array):
     avg_similarities = np.mean(scores, axis=1)
     return avg_similarities
 
-def _cosine(blooms_1: np.array, blooms_2: np.array):
+def _cosine(blooms_1: np.array, blooms_2: np.array, gpu_on = False):
+    if gpu_on:
+        intersection_bytes = cp.bitwise_and(blooms_1, blooms_2)
+        intersections = intersection_bytes.sum(axis=2)
+
+        # 2. Cardinalities (Count of True)
+        card_1 = cp.sum(blooms_1, axis=2)
+        card_2 = cp.sum(blooms_2, axis=2)
+
+        denom = cp.sqrt(card_1 * card_2)
+        scores = cp.zeros_like(intersections, dtype=cp.float64)
+        mask = denom > 0
+        scores[mask] = intersections[mask] / denom[mask]
+        avg_similarities = cp.mean(scores, axis=1)
+        return avg_similarities
+
     intersection_bytes = np.bitwise_and(blooms_1, blooms_2)
     intersections = intersection_bytes.sum(axis=2)
 
