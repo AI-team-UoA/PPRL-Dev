@@ -3,10 +3,13 @@ Docstring for pprl.clustering
 """
 from __future__ import annotations
 from queue import PriorityQueue
-from collections import defaultdict
+from collections import defaultdict, deque
 from time import time
 from typing import Dict, List, Tuple
 from itertools import chain
+import cudf
+import cugraph
+import cugraph
 from cupyx.scipy.sparse import csr_matrix
 from cupyx.scipy.sparse.csgraph import connected_components
 # from rustworkx import PyGraph as Graph
@@ -86,61 +89,106 @@ class ConnectedComponentsClustering(AbstractClustering):
         if len(edges) == 0:
             return []
 
+        edges_df = cudf.DataFrame(
+            edges,
+            columns=["src", "dst"],
+            dtype="int32"
+            )
 
-        matrix = csr_matrix(
-            (cp.ones(len(edges)),
-            (edges[:,0], edges[:,1])),
-            shape=(n_nodes, n_nodes)
+        # Build graph from edge list (NO CSR!)
+        G = cugraph.Graph(directed=False)
+        G.from_cudf_edgelist(
+            edges_df,
+            source="src",
+            destination="dst",
+            renumber=True  # important since you already have integer IDs
         )
-        _, labels = connected_components(matrix, directed=False,
-                                            return_labels=True)
-        unique_labels, counts = cp.unique(labels, return_counts=True)
+
+        # Run WCC
+        labels_df = cugraph.connected_components(G)
+
+        label_counts = labels_df['labels'].value_counts()
 
         # 3. Identify labels that strictly have size == 2
-        # valid_labels is a boolean mask of the unique_labels
-        valid_mask = (counts == 2)
-        valid_component_ids = unique_labels[valid_mask]
+        # We get the indices (which are the labels) where the count is 2
+        valid_labels = label_counts[label_counts == 2].index
 
-        # 4. Filter the nodes
-        # 'np.isin' checks which nodes belong to the valid components.
-        # We essentially discard all nodes that are part of clusters != 2
-        node_mask = cp.isin(labels, valid_component_ids)
+        # 4. Filter the dataframe directly
+        # We keep only rows where the label is in our list of valid_labels
+        # merge is usually faster than isin for large GPU dataframes
+        valid_labels_df = cudf.DataFrame({'labels': valid_labels})
+        filtered_df = labels_df.merge(valid_labels_df, on='labels')
 
-        # We need the indices of the nodes, not just the boolean mask
-        # We sort them by label to ensure the pairs stay together
-        valid_node_indices = cp.where(node_mask)[0]
-        valid_node_labels = labels[valid_node_indices]
+        # 5. Sort to align pairs
+        # We sort by 'labels' so the two nodes belonging to the same component end up next to each other.
+        # We break ties with 'vertex' just to be deterministic.
+        filtered_df = filtered_df.sort_values(by=['labels', 'vertex'])
 
-        # Sort by label so that pairs are adjacent in the array
-        # e.g. [nodeA, nodeB, nodeC, nodeD] where A&B are comp 1, C&D are comp 5
-        sort_order = cp.argsort(valid_node_labels)
-        sorted_nodes = valid_node_indices[sort_order]
+        # 6. Extract the actual Node IDs (vertex column)
+        sorted_nodes = filtered_df['vertex'].values
 
-        # 5. Reshape into pairs (The Magic Step)
-        # Since we filtered for ONLY size 2, the length of sorted_nodes
-        # must be even. We can reshape directly into a list of pairs.
-        # This is instantaneous compared to a loop.
+        # 7. Reshape (The Magic Step)
+        # This works because we filtered for size=2 and sorted by label
         result_matrix = sorted_nodes.reshape(-1, 2)
-        # sorted_idx = np.argsort(labels)
-        # sorted_labels = labels[sorted_idx]
 
-        # # Find where the label changes to identify cluster boundaries
-        # # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
-        # split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
+        # exit(10)
+        # labels = labels_df['labels'].values
 
-        # # Split the original node indices into arrays based on these boundaries
-        # clusters = np.split(sorted_idx, split_idx)
 
-        # # 4. Filter for clusters of size 2
-        # # This list comprehension is now iterating over CLUSTERS, not NODES
-        # # (e.g., 500k iterations instead of 100M)
-        # resulting_clusters = [c.tolist() for c in clusters if len(c) == 2]
+        # # matrix = csr_matrix(
+        # #     (cp.ones(len(edges)),
+        # #     (edges[:,0], edges[:,1])),
+        # #     shape=(n_nodes, n_nodes)
+        # # )
+        # # _, labels = connected_components(matrix, directed=False,
+        # #                                     return_labels=True)
+        # unique_labels, counts = cp.unique(labels, return_counts=True)
 
-        # clusters = [[] for _ in range(n_components)]
-        # for node_index, component_index in enumerate(labels):
-        #     clusters[component_index].append(node_index)
+        # # 3. Identify labels that strictly have size == 2
+        # # valid_labels is a boolean mask of the unique_labels
+        # valid_mask = (counts == 2)
+        # valid_component_ids = unique_labels[valid_mask]
 
-        # resulting_clusters = [c for c in clusters if len(c) == 2]
+        # # 4. Filter the nodes
+        # # 'np.isin' checks which nodes belong to the valid components.
+        # # We essentially discard all nodes that are part of clusters != 2
+        # node_mask = cp.isin(labels, valid_component_ids)
+
+        # # We need the indices of the nodes, not just the boolean mask
+        # # We sort them by label to ensure the pairs stay together
+        # valid_node_indices = cp.where(node_mask)[0]
+        # valid_node_labels = labels[valid_node_indices]
+
+        # # Sort by label so that pairs are adjacent in the array
+        # # e.g. [nodeA, nodeB, nodeC, nodeD] where A&B are comp 1, C&D are comp 5
+        # sort_order = cp.argsort(valid_node_labels)
+        # sorted_nodes = valid_node_indices[sort_order]
+
+        # # 5. Reshape into pairs (The Magic Step)
+        # # Since we filtered for ONLY size 2, the length of sorted_nodes
+        # # must be even. We can reshape directly into a list of pairs.
+        # # This is instantaneous compared to a loop.
+        # result_matrix = sorted_nodes.reshape(-1, 2)
+        # # sorted_idx = np.argsort(labels)
+        # # sorted_labels = labels[sorted_idx]
+
+        # # # Find where the label changes to identify cluster boundaries
+        # # # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
+        # # split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
+
+        # # # Split the original node indices into arrays based on these boundaries
+        # # clusters = np.split(sorted_idx, split_idx)
+
+        # # # 4. Filter for clusters of size 2
+        # # # This list comprehension is now iterating over CLUSTERS, not NODES
+        # # # (e.g., 500k iterations instead of 100M)
+        # # resulting_clusters = [c.tolist() for c in clusters if len(c) == 2]
+
+        # # clusters = [[] for _ in range(n_components)]
+        # # for node_index, component_index in enumerate(labels):
+        # #     clusters[component_index].append(node_index)
+
+        # # resulting_clusters = [c for c in clusters if len(c) == 2]
 
         return result_matrix.tolist()
 
@@ -197,10 +245,12 @@ class UniqueMappingClustering(AbstractClustering):
         v = valid_edges[:,1]
         w = valid_weights
 
-        sort_indices = cp.lexsort((v, u, -w))
+
+        keys_stack = cp.stack([v, u, -w])
+        sort_indices = cp.lexsort(keys_stack)
         candidates = valid_edges[sort_indices]
 
-        candidates = candidates[:edges.shape[0]*2]
+        candidates = candidates[:edges.shape[0]*2].get()
 
         seen = set()
         unique_edge_indices = []
@@ -210,7 +260,7 @@ class UniqueMappingClustering(AbstractClustering):
                 seen.add(v)
                 unique_edge_indices.append(i)
 
-        unique_edges = candidates[unique_edge_indices]
+        unique_edges = cp.asarray(candidates[unique_edge_indices])
 
         clusters = ConnectedComponentsClustering.scipi_connected_components(
             edges=unique_edges,
@@ -350,7 +400,200 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         self.men_candidates = None
         self.women_candidates = None
 
+
     def process(self,
+        graph: Tuple[np.array, np.array],
+        encoded_data: BloomEncodedData,
+        similarity_threshold: float = 0.1) -> list:
+        """
+        Docstring for process
+
+        :param self: Description
+        :param graph: Description
+        :type graph: Graph
+        :param encoded_data: Description
+        :type encoded_data: BloomEncodedData
+        :param similarity_threshold: Description
+        :type similarity_threshold: float
+        :return: Description
+        :rtype: list
+        """
+
+        start_time = time()
+
+        self.encoded_data = encoded_data
+        self.similarity_threshold : float = similarity_threshold
+
+
+        edges, weights = graph
+        edges_np = edges
+
+
+
+        edges_cp = cp.asarray(edges)
+        weights_cp = cp.asarray(weights)
+        men = cp.unique(edges_cp[:,0]).get()
+        valid_mask = weights_cp > self.similarity_threshold
+        valid_edges = edges_cp[valid_mask]
+        valid_weights = weights_cp[valid_mask]
+
+
+        key_men_candidates = valid_edges[:, 0].get()
+        men_candidates = valid_edges.get()
+
+        key_women_candidates = valid_edges[:, 1].get()
+        women_candidates = valid_edges.get()
+
+
+        #  sort
+
+        sorted_weights_indices = cp.argsort((-valid_weights)).get()
+        key_men_candidates = key_men_candidates[sorted_weights_indices]
+        men_candidates = men_candidates[sorted_weights_indices]
+        key_women_candidates = key_women_candidates[sorted_weights_indices]
+        women_candidates = women_candidates[sorted_weights_indices]
+
+        similarities = valid_weights.get()
+        similarities = similarities[sorted_weights_indices]
+
+        men_len = self.encoded_data.bounds[0]
+        women_len = self.encoded_data.bounds[1] - self.encoded_data.bounds[0]
+        men_active = np.full(men_candidates.shape[0], True, bool)
+        women_active = np.full(women_candidates.shape[0], True, bool)
+
+        is_bachelor = np.full(men_len, False, bool)
+        is_uncertain = np.full(men_len, False, bool)
+        fiances = np.full(women_len, -1, np.int32)
+        current_matches = defaultdict(list)
+
+        if len(valid_edges) == 0:
+            return []
+
+        free_men = deque(men.tolist())
+
+
+        while free_men:
+            man = free_men.popleft()
+
+            mask = (key_men_candidates == man) & men_active
+            indices = np.where(mask)[0]
+            index = indices[0] if indices.size > 0 else None
+            woman = key_women_candidates[index] if index else -1
+
+            if woman == -1:
+                if not is_bachelor[man]:
+                    is_bachelor[man] = True
+                    if not man in key_men_candidates:
+                        free_men.append(man)
+                    if indices.size > 0:
+                        men_active[indices] = True
+                else:
+                    continue
+            else:
+                fiance = fiances[woman - men_len]
+                if fiance == -1:
+                    current_matches[man].append((man, woman))
+                    fiances[woman - men_len] = man
+                else:
+                    man_score = similarities[index]
+
+                    fiance_mask = (key_men_candidates == fiance) & (key_women_candidates == woman)
+                    fiance_indices = np.where(fiance_mask)[0]
+                    fiance_score = similarities[fiance_indices[0]]
+
+                    if fiance == -1 or is_uncertain[fiance] or man_score > fiance_score:
+                        current_matches[fiance] = [(m, w) for m,w in current_matches[fiance] \
+                                    if (m != fiance or w != woman)]
+                        current_matches[man].append((man, woman))
+                        fiances[woman - men_len] = man
+                        if not is_uncertain[fiance]:
+                            men_active[fiance_indices] = False
+                    else:
+                        to_deactivate = (key_men_candidates == man) & (key_women_candidates == woman)
+                        deactivate_indices = np.where(to_deactivate)[0]
+                        men_active[deactivate_indices] = False
+
+
+        edge_list = [(m, w) for m,w in chain.from_iterable(current_matches.values())]
+
+        # Create GPU DataFrame directly
+        edges_df = cudf.DataFrame(
+            edge_list,
+            columns=["src", "dst"],
+            dtype="int32"
+        )
+
+        # Build graph from edge list (NO CSR!)
+        G = cugraph.Graph(directed=False)
+        G.from_cudf_edgelist(
+            edges_df,
+            source="src",
+            destination="dst",
+            renumber=True
+        )
+        components_df = cugraph.connected_components(G).to_pandas()
+        clusters = components_df.groupby('labels')['vertex'].apply(set).tolist()
+        # clusters = [set(group_data['vertex'].values) for _, group_data in components_df.groupby('labels')]
+
+        # for label, group_data in group_v:
+        #     print(f"\nComponent Label: {label}")
+        #     print(group_data)
+        # # print(group_v)
+        # exit(10)
+        # Run WCC
+        # components_df = components_df.sort_values(by='labels')
+        # sorted_idx = cp.asarray(components_df['vertex'])
+        # sorted_labels = cp.asarray(components_df['labels'])
+
+        # # 5. Split into clusters (Logic remains exactly the same)
+        # split_idx = cp.flatnonzero(cp.diff(sorted_labels) > 0) + 1
+        # clusters = cp.split(sorted_idx, split_idx.get())
+        # labels = cp.full(self.encoded_data.bounds[1], -1, dtype=cp.int32)
+
+        # labels[labels_df['vertex'].values] = labels_df['labels'].values
+        # # print(labels_df)
+        # edges_np = np.array(edge_list, dtype=np.int32)
+        # new_edges = cp.asarray(edges_np)
+
+        # n_nodes = cp.max(new_edges) + 1
+
+        # matrix = csr_matrix(
+        #     (cp.ones(new_edges.shape[0]),
+        #     (new_edges[:,0], new_edges[:,1])),
+        #     shape=(n_nodes, n_nodes)
+        # )
+        # components, labels = connected_components(matrix, directed=False,
+        #                                     return_labels=True)
+
+
+        # print(components)
+        # # # print(labels)
+
+        # sorted_idx = cp.argsort(labels)
+        # sorted_labels = labels[sorted_idx]
+
+        # split_idx = cp.flatnonzero(cp.diff(sorted_labels) > 0) + 1
+        # clusters = cp.split(sorted_idx, split_idx.get())
+
+        # print(len(clusters))
+        # exit(10)
+
+        # labels_df = labels_df.sort_values(by='labels')
+        # sorted_idx = labels_df['vertex'].values
+        # sorted_labels = labels_df['labels'].values
+        # split_idx = cp.flatnonzero(cp.diff(sorted_labels) > 0) + 1
+        # clusters = cp.split(sorted_idx, split_idx.get())
+        # vertices = labels_df['vertex'].values
+        # components = labels_df['labels'].values
+        # sorted_idx = cp.argsort(components)
+        # sorted_components = components[sorted_idx]
+        # sorted_vertices = vertices[sorted_idx]
+        # split_idx = cp.flatnonzero(cp.diff(sorted_components) > 0) + 1
+        # clusters = cp.split(sorted_idx, split_idx.get())
+        self.execution_time = time() - start_time
+        return clusters
+
+    def _process(self,
         graph: Tuple[np.array, np.array],
         encoded_data: BloomEncodedData,
         similarity_threshold: float = 0.1) -> list:
@@ -381,53 +624,138 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         if number_of_comparisons == 0:
             return clusters
 
-        men : set = set()
-        if self.men_candidates is None:
-            self.men_candidates : dict = defaultdict(list)
-            self.women_candidates : dict = defaultdict(list)
+        # men : set = set()
 
-            for i, (u,v) in enumerate(edges):
-                man, woman = self.sorted_indicators(u, v)
-                similarity = weights[i]
-                if similarity > self.similarity_threshold:
-                    self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
-                                                                    right_node=woman,
-                                                                    similarity=similarity))
-                    self.women_candidates[woman].append(ExtendedSimilarityEdge(left_node=woman,
-                                                                        right_node=man,
-                                                                        similarity=similarity))
-                men.add(man)
-            self.men = men
-            self.base_candidates = {}
-            for man, candidates in self.men_candidates.items():
-                self.men_candidates[man] = sorted(candidates, reverse=True)
-                self.base_candidates[man] = self.men_candidates[man].copy()
-            for woman, candidates in self.women_candidates.items():
-                self.women_candidates[woman] = sorted(candidates, reverse=True)
-                self.base_candidates[woman] = self.women_candidates[woman].copy()
+        self.men_candidates : dict = defaultdict(list)
 
-        else:
-            men = self.men
-            self.men_candidates : dict = defaultdict(list)
-            self.women_candidates : dict = defaultdict(list)
-            for key, candidates in self.base_candidates.items():
-                for e in candidates:
-                    if e.similarity > self.similarity_threshold:
-                        e.active = True
-                        if key < self.encoded_data.bounds[0]:
-                            self.men_candidates[key].append(e)
-                        else:
-                            self.women_candidates[key].append(e)
-                    else:
-                        break
 
+        self.women_candidates : dict = defaultdict(list)
+
+        men = edges[:, 0]
+        men = cp.unique(men).tolist()
+
+        valid_indices = weights > self.similarity_threshold
+        valid_edges = edges[valid_indices]
+        valid_weights = weights[valid_indices]
+        # 2. Transfer to CPU immediately
+        # Moving raw arrays to CPU now is 100x faster than iterating over them on GPU later
+        edges_np = valid_edges.get()        # Shape (N, 2)
+        weights_np = valid_weights.get()    # Shape (N,)
+
+        # --- Process Men Candidates (Group by Column 0) ---
+
+        # Sort by Men (u)
+        sort_order_u = np.argsort(edges_np[:, 0])
+        edges_u_sorted = edges_np[sort_order_u]
+        weights_u_sorted = weights_np[sort_order_u]
+
+        # Get columns
+        u_col = edges_u_sorted[:, 0]
+        v_col = edges_u_sorted[:, 1]
+
+        # Find split points
+        unique_u, start_indices = np.unique(u_col, return_index=True)
+
+        # Split into groups (v and w)
+        # Note: We don't need to split 'u' because we know u is constant for the group
+        v_groups = np.split(v_col, start_indices[1:])
+        w_groups = np.split(weights_u_sorted, start_indices[1:])
+
+        # Build Dictionary
+        self.men_candidates = {
+            int(u): [
+                ExtendedSimilarityEdge(int(u), int(tgt), int(w))
+                for tgt, w in zip(targets, group_weights)
+            ]
+            for u, targets, group_weights in zip(unique_u, v_groups, w_groups)
+        }
+
+        # --- Process Women Candidates (Group by Column 1) ---
+
+        # Sort by Women (v) - CRITICAL FIX: You must re-sort by the second column!
+        sort_order_v = np.argsort(edges_np[:, 1])
+        edges_v_sorted = edges_np[sort_order_v]
+        weights_v_sorted = weights_np[sort_order_v]
+
+        # Get columns
+        u_col_v = edges_v_sorted[:, 0]
+        v_col_v = edges_v_sorted[:, 1]
+
+        # Find split points
+        unique_v, start_indices_v = np.unique(v_col_v, return_index=True)
+
+        # Split into groups (u and w)
+        u_groups = np.split(u_col_v, start_indices_v[1:])
+        w_groups_v = np.split(weights_v_sorted, start_indices_v[1:])
+
+        # Build Dictionary
+        self.women_candidates = {
+            int(v): [
+                ExtendedSimilarityEdge(int(src), int(v), int(w))
+                for src, w in zip(sources, group_weights)
+            ]
+            for v, sources, group_weights in zip(unique_v, u_groups, w_groups_v)
+        }
+
+        # for i, (u,v) in enumerate(edges):
+        #     man, woman = self.sorted_indicators(u, v)
+        #     man = int(man)
+        #     woman = int(woman)
+
+        #     similarity = weights[i]
+        #     if similarity > self.similarity_threshold:
+        #         self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
+        #                                                         right_node=woman,
+        #                                                         similarity=similarity))
+        #         self.women_candidates[woman].append(ExtendedSimilarityEdge(left_node=woman,
+        #                                                             right_node=man,
+        #                                                             similarity=similarity))
+        #     men.add(man)
+        # self.men = men
+
+        ##SOLVE
+
+        # active_men : cp.array = cp.where((self.men_partners == -1) &
+        #                       (self.men_next_proposal_idx < (self.row_ends - self.row_starts)))[0]
+        # while active_men.size > 0:
+        #     flat_indices = self.row_starts[active_men] + self.men_next_proposal_idx[active_men]
+        #     proposed_women = self.men_preferences[flat_indices] # The ID of the woman
+        #     proposal_scores = self.men_pref_scores[flat_indices]
+        #     batch_sort = cp.lexsort((-proposal_scores, proposed_women))
+        #     active_men_sorted = active_men[batch_sort]
+        #     proposed_women_sorted = proposed_women[batch_sort]
+        #     scores_sorted = proposal_scores[batch_sort]
+        #     unique_women, unique_indices = cp.unique(proposed_women_sorted, return_index=True)
+        #     best_suitors = active_men_sorted[unique_indices]
+        #     best_scores = scores_sorted[unique_indices]
+        #     current_fiances = self.women_partners[unique_women]
+        #     if not hasattr(self, 'women_match_scores'):
+        #         self.women_match_scores = cp.full(number_of_comparisons+1, -1.0, dtype=cp.float32)
+        #     current_scores = self.women_match_scores[unique_women]
+        #     new_wins = (current_fiances == -1) | (best_scores > current_scores)
+        #     winning_women = unique_women[new_wins]
+        #     winning_men = best_suitors[new_wins]
+        #     winning_scores = best_scores[new_wins]
+        #     old_men = self.women_partners[winning_women]
+        #     mask_old_exists = old_men != -1
+        #     if cp.any(mask_old_exists):
+        #         self.men_partners[old_men[mask_old_exists]] = -1
+        #     self.women_partners[winning_women] = winning_men
+        #     self.women_match_scores[winning_women] = winning_scores
+        #     self.men_partners[winning_men] = winning_women
+        #     self.men_next_proposal_idx[active_men] += 1
+        #     active_men : cp.array = cp.where((self.men_partners == -1) &
+        #                       (self.men_next_proposal_idx < (self.row_ends - self.row_starts)))[0]
 
 
         self.is_bachelor : list = [False] * self.encoded_data.bounds[0]
+
+
         self.is_uncertain : list = [False] * self.encoded_data.bounds[0]
         self.fiances : list = [-1] * (self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
         self.current_matches : Dict[any, List[ExtendedSimilarityEdge]] = {}
-        self.free_men : list = list(men)
+        # self.free_men : list = list(men)
+        self.free_men = men
 
         while len(self.free_men) > 0:
             man = self.free_men.pop(0)
@@ -457,11 +785,26 @@ class KiralyMSMApproximateClustering(AbstractClustering):
                     else:
                         self.deactivate_candidate(entity=man, candidate=woman)
 
-        new_edges = cp.array([
-            (e.left_node, e.right_node)
-            for e in chain.from_iterable(self.current_matches.values())
-        ])
+        ##CLUSTERING
+        # matched_men = cp.where(self.men_partners != -1)[0]
+        # matched_women = self.men_partners[matched_men]
+        # all_u = cp.concatenate([matched_men, matched_women])
+        # all_v = cp.concatenate([matched_women, matched_men])
+        # data = cp.ones(all_u.shape[0], dtype=cp.float32)
+
+        # matrix = csr_matrix((data, (all_u, all_v)), shape=(n_nodes, n_nodes))
+
+        edge_list = [(e.left_node, e.right_node) for e in chain.from_iterable(self.current_matches.values())]
+        edges_np = np.array(edge_list, dtype=np.int32)
+        new_edges = cp.asarray(edges_np)
+
+        # new_edges = cp.array([
+        #     (e.left_node, e.right_node)
+        #     for e in chain.from_iterable(self.current_matches.values())
+        # ])
+
         n_nodes = cp.max(new_edges) + 1
+
         matrix = csr_matrix(
             (cp.ones(new_edges.shape[0]),
             (new_edges[:,0], new_edges[:,1])),
@@ -479,7 +822,7 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         split_idx = cp.flatnonzero(cp.diff(sorted_labels) > 0) + 1
 
         # Split the original node indices into arrays based on these boundaries
-        clusters = cp.split(sorted_idx, split_idx)
+        clusters = cp.split(sorted_idx, split_idx.get())
         # clusters = [[] for _ in range(n_components)]
         # for node_index, component_index in enumerate(labels):
         #     clusters[component_index].append(node_index)

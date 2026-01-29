@@ -167,7 +167,17 @@ def _cosine(blooms_1: np.array, blooms_2: np.array, gpu_on = False):
     return avg_similarities
 
 
-def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
+def _scm(blooms_1 : np.array, blooms_2 : np.array, gpu_on = False) -> np.array:
+    if gpu_on:
+        length = blooms_1.shape[2]
+        xor_bytes = cp.bitwise_xor(blooms_1, blooms_2)
+        xor_sum = xor_bytes.sum(axis=2)
+        matches = length - xor_sum
+        scm_per_attr = matches / length
+        avg_similarities = cp.mean(scm_per_attr, axis=1)
+
+        return avg_similarities
+
     length = blooms_1.shape[2]
     xor_bytes = np.bitwise_xor(blooms_1, blooms_2)
     xor_sum = xor_bytes.sum(axis=2)
