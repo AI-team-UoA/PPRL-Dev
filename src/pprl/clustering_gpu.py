@@ -251,13 +251,14 @@ class UniqueMappingClustering(AbstractClustering):
         candidates = valid_edges[sort_indices]
 
         candidates = candidates[:edges.shape[0]*2].get()
+        max_node = candidates.max() + 1
+        used = np.zeros(max_node, dtype=bool)
 
-        seen = set()
         unique_edge_indices = []
         for i, (u,v) in enumerate(candidates):
-            if u not in seen and v not in seen:
-                seen.add(u)
-                seen.add(v)
+            if not used[u] and not used[v]:
+                used[u] = True
+                used[v] = True
                 unique_edge_indices.append(i)
 
         unique_edges = cp.asarray(candidates[unique_edge_indices])
@@ -429,6 +430,9 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         edges_np = edges
 
 
+        if edges.shape[0] == 0:
+            return []
+
 
         edges_cp = cp.asarray(edges)
         weights_cp = cp.asarray(weights)
@@ -443,6 +447,10 @@ class KiralyMSMApproximateClustering(AbstractClustering):
 
         key_women_candidates = valid_edges[:, 1].get()
         women_candidates = valid_edges.get()
+        men_to_indices = defaultdict(list)
+
+
+
 
 
         #  sort
@@ -453,68 +461,67 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         key_women_candidates = key_women_candidates[sorted_weights_indices]
         women_candidates = women_candidates[sorted_weights_indices]
 
-        similarities = valid_weights.get()
-        similarities = similarities[sorted_weights_indices]
+        similarities = valid_weights[sorted_weights_indices]
+
+        for i, m in enumerate(key_men_candidates):
+            men_to_indices[m].append(i)
 
         men_len = self.encoded_data.bounds[0]
         women_len = self.encoded_data.bounds[1] - self.encoded_data.bounds[0]
         men_active = np.full(men_candidates.shape[0], True, bool)
-        women_active = np.full(women_candidates.shape[0], True, bool)
+        edge_score = np.full((men_len, women_len), -np.inf)
+        edge_index = np.full((men_len, women_len), -1, dtype=int)
 
-        is_bachelor = np.full(men_len, False, bool)
+        is_bachelor = cp.asarray(np.full(men_len, False, bool))
         is_uncertain = np.full(men_len, False, bool)
         fiances = np.full(women_len, -1, np.int32)
-        current_matches = defaultdict(list)
+        current_matches = np.full(men_len, -1, np.int32)
 
-        if len(valid_edges) == 0:
-            return []
 
         free_men = deque(men.tolist())
 
 
         while free_men:
             man = free_men.popleft()
+            indices = men_to_indices.get(man, [])
+            if not indices:
+                continue
 
-            mask = (key_men_candidates == man) & men_active
-            indices = np.where(mask)[0]
-            index = indices[0] if indices.size > 0 else None
-            woman = key_women_candidates[index] if index else -1
+            indices = np.asarray(indices)
+            active_mask = men_active[indices]
+            if not active_mask.any():
+                woman=-1
+            else:
+                index = indices[active_mask][0]
+                woman = key_women_candidates[index]
 
             if woman == -1:
                 if not is_bachelor[man]:
-                    is_bachelor[man] = True
-                    if not man in key_men_candidates:
-                        free_men.append(man)
-                    if indices.size > 0:
-                        men_active[indices] = True
-                else:
-                    continue
+                    is_bachelor[man] =True
+                    men_active[indices] = True
             else:
                 fiance = fiances[woman - men_len]
+                man_score = similarities[index]
                 if fiance == -1:
-                    current_matches[man].append((man, woman))
+                    current_matches[man] = woman
+                    edge_score[man, woman-men_len] = man_score
+                    edge_index[man, woman-men_len] = index
                     fiances[woman - men_len] = man
                 else:
-                    man_score = similarities[index]
-
-                    fiance_mask = (key_men_candidates == fiance) & (key_women_candidates == woman)
-                    fiance_indices = np.where(fiance_mask)[0]
-                    fiance_score = similarities[fiance_indices[0]]
-
-                    if fiance == -1 or is_uncertain[fiance] or man_score > fiance_score:
-                        current_matches[fiance] = [(m, w) for m,w in current_matches[fiance] \
-                                    if (m != fiance or w != woman)]
-                        current_matches[man].append((man, woman))
+                    fiance_score = edge_score[fiance, woman-men_len]
+                    fiance_index = edge_index[fiance, woman-men_len]
+                    if is_uncertain[fiance] or man_score > fiance_score:
+                        current_matches[fiance] = -1
+                        current_matches[man] = woman
+                        edge_score[man, woman-men_len] = man_score
+                        edge_index[man, woman-men_len] = index
                         fiances[woman - men_len] = man
                         if not is_uncertain[fiance]:
-                            men_active[fiance_indices] = False
+                            men_active[fiance_index] = False
                     else:
-                        to_deactivate = (key_men_candidates == man) & (key_women_candidates == woman)
-                        deactivate_indices = np.where(to_deactivate)[0]
-                        men_active[deactivate_indices] = False
+                        men_active[index] = False
 
-
-        edge_list = [(m, w) for m,w in chain.from_iterable(current_matches.values())]
+        edge_list = [(m, w) for m,w in enumerate(current_matches) if w!=-1]
 
         # Create GPU DataFrame directly
         edges_df = cudf.DataFrame(
@@ -522,7 +529,6 @@ class KiralyMSMApproximateClustering(AbstractClustering):
             columns=["src", "dst"],
             dtype="int32"
         )
-
         # Build graph from edge list (NO CSR!)
         G = cugraph.Graph(directed=False)
         G.from_cudf_edgelist(
@@ -532,7 +538,11 @@ class KiralyMSMApproximateClustering(AbstractClustering):
             renumber=True
         )
         components_df = cugraph.connected_components(G).to_pandas()
+        # print(components_df)
+        # exit(10)
+
         clusters = components_df.groupby('labels')['vertex'].apply(set).tolist()
+        # print(clusters)
         # clusters = [set(group_data['vertex'].values) for _, group_data in components_df.groupby('labels')]
 
         # for label, group_data in group_v:

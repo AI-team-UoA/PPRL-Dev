@@ -97,6 +97,7 @@ if __name__ == '__main__':
                     'ConnectedComponentsClustering',
                     'UniqueMappingClustering',
                     'KiralyMSMApproximateClustering']:
+
                     cl_done = clustering_done_list(cl_method)
                     clustered_done.update(cl_done if cl_done else set())
                     if flag == False:
@@ -165,7 +166,7 @@ if __name__ == '__main__':
                     mode='a+', index=False, header=not loaded)
 
 
-                for cl in [ConnectedComponentsClustering,KiralyMSMApproximateClustering,
+                for cl in [KiralyMSMApproximateClustering, ConnectedComponentsClustering,
                         UniqueMappingClustering
                         ]:
                     clustering_method = cl()
