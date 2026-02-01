@@ -1,0 +1,4 @@
+name,total_matches,similarity_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Matching with scm,56361672,0.05,0.0,100.0,0.0,853,56360819,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,56361672,0.05,0.0,100.0,0.0,853,56360819,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+Matching with scm,56361672,0.1,0.0,100.0,0.0,853,56360819,23769,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

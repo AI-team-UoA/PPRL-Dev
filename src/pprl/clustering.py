@@ -9,9 +9,8 @@ from typing import Dict, List, Tuple
 from itertools import chain
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
-from rustworkx import PyGraph as Graph
+# from rustworkx import PyGraph as Graph
 import numpy as np
-from ordered_set import OrderedSet
 from pprl.encoded_data import BloomEncodedData
 from pprl.base_clustering import AbstractClustering, ExtendedSimilarityEdge
 
@@ -346,6 +345,9 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         self.similarity_threshold : float
         self.men_candidates = None
         self.women_candidates = None
+        
+        
+    
 
     def process(self,
         graph: Tuple[np.array, np.array],
@@ -381,7 +383,7 @@ class KiralyMSMApproximateClustering(AbstractClustering):
             self.men_candidates : dict = defaultdict(list)
             self.women_candidates : dict = defaultdict(list)
 
-            for i, (u,v) in enumerate(edges):
+            for i, (u,v) in enumerate(edges.tolist()):
                 man, woman = self.sorted_indicators(u, v)
                 similarity = weights[i]
                 if similarity > self.similarity_threshold:

@@ -5,20 +5,23 @@ import os
 import pandas as pd
 from tqdm import tqdm
 from utils import load_dataframe, config_bloom_filter
+import rmm
+rmm.reinitialize(pool_allocator=False)
+
 from pprl.matching_gpu import Matcher
-from pprl.clustering_gpu import AbstractClustering, UniqueMappingClustering, \
+from pprl.clustering_gpu import UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 
 if __name__ == '__main__':
 
 
-    DIR = "D9"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'scholarclean'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
     attributes = [['title']]
-    SEP = ">"
+    SEP = "|"
 
 
     # DIR = "D2"
@@ -49,7 +52,7 @@ if __name__ == '__main__':
     matched_done = set()
     clustered_done = set()
     skip = set()
-    for metric in ['dice']:
+    for metric in ['dice', 'jaccard', 'cosine']:
         matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
         matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
         matching_df['metric'] = metric
@@ -94,6 +97,7 @@ if __name__ == '__main__':
                     'ConnectedComponentsClustering',
                     'UniqueMappingClustering',
                     'KiralyMSMApproximateClustering']:
+
                     cl_done = clustering_done_list(cl_method)
                     clustered_done.update(cl_done if cl_done else set())
                     if flag == False:
@@ -130,7 +134,7 @@ if __name__ == '__main__':
                 continue
             print(f"Running for {metric}")
             graph = None
-            for similarity in range(5,100,5):
+            for similarity in tqdm(range(5,100,5), desc="Matching Similarity", total=19):
                 thr = similarity / 100
                 if graph is None:
                     matcher = Matcher(batch_size=10_000, threshold=thr, metric=metric)
@@ -146,7 +150,7 @@ if __name__ == '__main__':
                 if (metric, configuration['num_hashes'], similarity / 100) not in matched_done:
 
                     edges, _ = graph
-                    ev = matcher.evaluate(graph, verbose=True)
+                    ev = matcher.evaluate(graph, verbose=False)
                     matcher_ev = {
                         'name': f'Matching with {metric}',
                         'total_matches': edges.shape[0],
@@ -161,10 +165,11 @@ if __name__ == '__main__':
                     df.to_csv(f'{RESULTS}/{filename}',
                     mode='a+', index=False, header=not loaded)
 
-                for cl in [ConnectedComponentsClustering,
-                        KiralyMSMApproximateClustering,
-                        UniqueMappingClustering]:
-                    clustering_method = ConnectedComponentsClustering()
+
+                for cl in [KiralyMSMApproximateClustering, ConnectedComponentsClustering,
+                        UniqueMappingClustering
+                        ]:
+                    clustering_method = cl()
                     for cl_similarity in tqdm(range(10, 100, 10),
                         desc=f"Clustering {cl.__name__}",
                         total=9):
@@ -175,7 +180,7 @@ if __name__ == '__main__':
                             continue
                         thr_cl = cl_similarity / 100
                         clusters = clustering_method.process(graph, new_bloom, thr_cl)
-                        ev_cl = clustering_method.evaluate(clusters, verbose=True)
+                        ev_cl = clustering_method.evaluate(clusters, verbose=False)
                         cluster_ev = {
                             'name': f'Clustering with {cl.__name__}',
                             'total_clusters': len(clusters),
@@ -196,5 +201,4 @@ if __name__ == '__main__':
                         df = pd.DataFrame(evaluations)
                         df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
                         mode='a+', index=False, header=not loaded)
-
     print(f"Finished {DIR}")

@@ -3,6 +3,7 @@ Docstring for pprl.clustering
 """
 
 import numpy as np
+import cupy as cp
 from tqdm.autonotebook import tqdm
 import pandas as pd
 from pprl.datamodel import PPRLFeature
