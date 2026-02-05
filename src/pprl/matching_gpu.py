@@ -349,10 +349,10 @@ class Matcher(PPRLFeature):
                 batch_pairs=idx_pairs[start:end]
             src, tgt, weights = self._predict_batches(batch_pairs,
                                 bloom_matrix, unique_ids_arr)
-            edges_list.append(cp.column_stack((src, tgt)))
-            edges_weights_list.append(weights)
+            edges_list.append(np.column_stack((src.get(), tgt.get())))
+            edges_weights_list.append(weights.get())
 
-        return cp.concatenate(edges_list, axis=0), cp.concatenate(edges_weights_list, axis=0)
+        return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
     def evaluate(self,
                 prediction : np.array,

@@ -16,12 +16,18 @@ from pprl.clustering_gpu import UniqueMappingClustering, \
 if __name__ == '__main__':
 
 
-    DIR = "D8"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
-    attributes = [['title']]
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
+    attributes = [['title', 'starring']]
     SEP = "|"
+    # DIR = "D10"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'dblpclean'
+    # FILE2 = 'scholarclean'
+    # attributes = [['title']]
+    # SEP = ">"
 
 
     # DIR = "D2"
@@ -39,12 +45,12 @@ if __name__ == '__main__':
     print(f"Running MATCHING & CLUSTERING for {DIR}")
 
 
-    size = [1024]
-    qgrams = [4]
+    size = [1024//2]
+    qgrams = [2]
     TOTAL_LENGTH = 32
-    futures = []
-    MAX_CONCURRENCY = 24
-    CLUSTER_MAX_CONCURRENCY = 5
+    # futures = []
+    # MAX_CONCURRENCY = 24
+    # CLUSTER_MAX_CONCURRENCY = 5
 
 
     adjacent_config = {}
@@ -52,68 +58,68 @@ if __name__ == '__main__':
     matched_done = set()
     clustered_done = set()
     skip = set()
-    for metric in ['dice', 'jaccard', 'cosine']:
-        matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
-        matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
-        matching_df['metric'] = metric
-        matching_df['num_hashes'] = matching_df['config'].apply(lambda x: x['num_hashes'])
-        list_done = set(zip(
-            matching_df['metric'],
-            matching_df['num_hashes'],
-            matching_df['similarity_threshold']))
-        matched_done.update(list_done)
-        max_num_hashes = matching_df['num_hashes'].max()
+    # for metric in ['dice', 'jaccard', 'cosine']:
+    #     matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
+    #     matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
+    #     matching_df['metric'] = metric
+    #     matching_df['num_hashes'] = matching_df['config'].apply(lambda x: x['num_hashes'])
+    #     list_done = set(zip(
+    #         matching_df['metric'],
+    #         matching_df['num_hashes'],
+    #         matching_df['similarity_threshold']))
+    #     matched_done.update(list_done)
+    #     max_num_hashes = matching_df['num_hashes'].max()
 
 
-        def clustering_done_list(clustering_method: str):
-            filename = f"{clustering_method}_{metric}.csv"
-            if not os.path.exists(f"{RESULTS_CLUSTERING}/{filename}"):
-                return False
-            clustering_df = pd.read_csv(f"{RESULTS_CLUSTERING}/"
-                f"{clustering_method}_{metric}.csv")
-            clustering_df['config'] = clustering_df['config'].apply(
-                ast.literal_eval)
-            clustering_df['num_hashes'] = clustering_df['config'].apply(
-                lambda x: x['num_hashes'])
-            clustering_df['method'] = clustering_method
-            list_done_cl = set(zip(
-                    clustering_df['method'],
-                    clustering_df['matcher'],
-                    clustering_df['num_hashes'],
-                    clustering_df['matching_thr'],
-                    clustering_df['clustering_threshold']))
-            return list_done_cl
+    #     def clustering_done_list(clustering_method: str):
+    #         filename = f"{clustering_method}_{metric}.csv"
+    #         if not os.path.exists(f"{RESULTS_CLUSTERING}/{filename}"):
+    #             return False
+    #         clustering_df = pd.read_csv(f"{RESULTS_CLUSTERING}/"
+    #             f"{clustering_method}_{metric}.csv")
+    #         clustering_df['config'] = clustering_df['config'].apply(
+    #             ast.literal_eval)
+    #         clustering_df['num_hashes'] = clustering_df['config'].apply(
+    #             lambda x: x['num_hashes'])
+    #         clustering_df['method'] = clustering_method
+    #         list_done_cl = set(zip(
+    #                 clustering_df['method'],
+    #                 clustering_df['matcher'],
+    #                 clustering_df['num_hashes'],
+    #                 clustering_df['matching_thr'],
+    #                 clustering_df['clustering_threshold']))
+    #         return list_done_cl
 
 
-        for hashing in range(1, max_num_hashes + 1):
-            flag = True
-            for similarity in range(5, 100, 5):
-                if flag == False:
-                    break
-                if (metric, hashing, similarity / 100) not in matched_done:
-                    flag = False
-                    break
-                for cl_method in [
-                    'ConnectedComponentsClustering',
-                    'UniqueMappingClustering',
-                    'KiralyMSMApproximateClustering']:
+    #     for hashing in range(1, max_num_hashes + 1):
+    #         flag = True
+    #         for similarity in range(5, 100, 5):
+    #             if flag == False:
+    #                 break
+    #             if (metric, hashing, similarity / 100) not in matched_done:
+    #                 flag = False
+    #                 break
+    #             for cl_method in [
+    #                 'ConnectedComponentsClustering',
+    #                 'UniqueMappingClustering',
+    #                 'KiralyMSMApproximateClustering']:
 
-                    cl_done = clustering_done_list(cl_method)
-                    clustered_done.update(cl_done if cl_done else set())
-                    if flag == False:
-                        continue
-                    if cl_done:
-                        for cl_similarity in range(10, 100, 10):
-                            if (cl_method, metric, hashing,
-                                similarity / 100,
-                                cl_similarity / 100) not in cl_done:
-                                flag = False
-                                break
-                    else:
-                        flag = False
-                        break
-            if flag:
-                skip.add((metric, hashing))
+    #                 cl_done = clustering_done_list(cl_method)
+    #                 clustered_done.update(cl_done if cl_done else set())
+    #                 if flag == False:
+    #                     continue
+    #                 if cl_done:
+    #                     for cl_similarity in range(10, 100, 10):
+    #                         if (cl_method, metric, hashing,
+    #                             similarity / 100,
+    #                             cl_similarity / 100) not in cl_done:
+    #                             flag = False
+    #                             break
+    #                 else:
+    #                     flag = False
+    #                     break
+    #         if flag:
+    #             skip.add((metric, hashing))
 
 
 

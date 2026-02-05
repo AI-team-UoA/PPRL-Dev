@@ -84,7 +84,7 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array, gpu_on = False) -> np.array:
         card_2 = cp.sum(blooms_2, axis=2)  # (n_candidates, n_attributes)
 
         denominators = card_1 + card_2
-        dice_scores = cp.zeros_like(intersections, dtype=cp.float64)
+        dice_scores = cp.zeros_like(intersections, dtype=cp.float32)
         valid_mask = denominators > 0
         dice_scores[valid_mask] = (2 * intersections[valid_mask]) / denominators[valid_mask]
         avg_similarities = cp.mean(dice_scores, axis=1)
@@ -116,7 +116,7 @@ def _jaccard(blooms_1: np.array, blooms_2: np.array, gpu_on = False):
         card_2 = cp.sum(blooms_2, axis=2)
 
         union = card_1 + card_2 - intersections
-        scores = cp.zeros_like(intersections, dtype=cp.float64)
+        scores = cp.zeros_like(intersections, dtype=cp.float32)
         mask = union > 0
         scores[mask] = intersections[mask] / union[mask]
         avg_similarities = cp.mean(scores, axis=1)
@@ -146,7 +146,7 @@ def _cosine(blooms_1: np.array, blooms_2: np.array, gpu_on = False):
         card_2 = cp.sum(blooms_2, axis=2)
 
         denom = cp.sqrt(card_1 * card_2)
-        scores = cp.zeros_like(intersections, dtype=cp.float64)
+        scores = cp.zeros_like(intersections, dtype=cp.float32)
         mask = denom > 0
         scores[mask] = intersections[mask] / denom[mask]
         avg_similarities = cp.mean(scores, axis=1)
