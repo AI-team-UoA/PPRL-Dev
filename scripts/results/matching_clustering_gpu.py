@@ -22,7 +22,8 @@ if __name__ == '__main__':
     FILE2 = 'dbpediaclean'
     attributes = [['title', 'starring']]
     SEP = "|"
-    # DIR = "D10"
+
+    # # DIR = "D10"
     # PATH = f"data/ccer/{DIR}"
     # FILE = 'dblpclean'
     # FILE2 = 'scholarclean'
@@ -30,12 +31,12 @@ if __name__ == '__main__':
     # SEP = ">"
 
 
-    # DIR = "D2"
+    # DIR = "D9"
     # PATH = f"data/ccer/{DIR}"
-    # FILE = 'abtclean'
-    # FILE2 = 'buyclean'
-    # attributes = [['name']]
-    # SEP = "|"
+    # FILE = 'dblpclean'
+    # FILE2 = 'scholarclean'
+    # attributes = [['title']]
+    # SEP = ">"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -45,7 +46,7 @@ if __name__ == '__main__':
     print(f"Running MATCHING & CLUSTERING for {DIR}")
 
 
-    size = [1024//2]
+    size = [1024 // 2]
     qgrams = [2]
     TOTAL_LENGTH = 32
     # futures = []
@@ -140,10 +141,10 @@ if __name__ == '__main__':
                 continue
             print(f"Running for {metric}")
             graph = None
-            for similarity in tqdm(range(5,100,5), desc="Matching Similarity", total=19):
+            for similarity in tqdm(range(5,100,10), desc="Matching Similarity", total=10):
                 thr = similarity / 100
                 if graph is None:
-                    matcher = Matcher(batch_size=10_000, threshold=thr, metric=metric)
+                    matcher = Matcher(batch_size=1_000_000, threshold=thr, metric=metric)
                     graph = matcher.predict(new_bloom)
                 else:
                     edges, weights = graph
@@ -176,35 +177,25 @@ if __name__ == '__main__':
                         UniqueMappingClustering
                         ]:
                     clustering_method = cl()
-                    for cl_similarity in tqdm(range(10, 100, 10),
-                        desc=f"Clustering {cl.__name__}",
-                        total=9):
-                        if (cl.__name__, metric,
-                            configuration['num_hashes'],
-                            thr,
-                            cl_similarity / 100) in clustered_done:
-                            continue
-                        thr_cl = cl_similarity / 100
-                        clusters = clustering_method.process(graph, new_bloom, thr_cl)
-                        ev_cl = clustering_method.evaluate(clusters, verbose=False)
-                        cluster_ev = {
-                            'name': f'Clustering with {cl.__name__}',
-                            'total_clusters': len(clusters),
-                            'clustering_threshold': thr_cl,
-                            'matcher': metric,
-                            'matching_thr': thr,
-                        }
+                    clusters = clustering_method.process(graph, new_bloom, thr)
+                    ev_cl = clustering_method.evaluate(clusters, verbose=False)
+                    cluster_ev = {
+                        'name': f'Clustering with {cl.__name__}',
+                        'total_clusters': len(clusters),
+                        'threshold': thr,
+                        'matcher': metric,
+                    }
 
-                        for keys, items in ev_cl.items():
-                            cluster_ev[keys] = round(items, 2) \
-                            if isinstance(items, float) else items
+                    for keys, items in ev_cl.items():
+                        cluster_ev[keys] = round(items, 2) \
+                        if isinstance(items, float) else items
 
-                        cluster_ev['config'] = configuration
-                        clustering_name = cl.__name__
-                        evaluations = [cluster_ev]
-                        filename = f"{clustering_name}_{metric}.csv"
-                        loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{filename}")
-                        df = pd.DataFrame(evaluations)
-                        df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
-                        mode='a+', index=False, header=not loaded)
+                    cluster_ev['config'] = configuration
+                    clustering_name = cl.__name__
+                    evaluations = [cluster_ev]
+                    filename = f"{clustering_name}_{metric}.csv"
+                    loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{filename}")
+                    df = pd.DataFrame(evaluations)
+                    df.to_csv(f'{RESULTS_CLUSTERING}/{filename}',
+                    mode='a+', index=False, header=not loaded)
     print(f"Finished {DIR}")

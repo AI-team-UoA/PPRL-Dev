@@ -253,13 +253,14 @@ class Matcher(PPRLFeature):
         _metric = metrics_dict.get(self.matcher_config.metric, metrics_dict['dice'])
 
         avg_similarities : cp.array = _metric(
-                bloom_matrix[batch_pairs[:,0]],
-                bloom_matrix[batch_pairs[:,1]], gpu_on=True)
+                cp.asarray(bloom_matrix[batch_pairs[:,0]]),
+                cp.asarray(bloom_matrix[batch_pairs[:,1]]), gpu_on=True)
 
         mask = avg_similarities >= self.matcher_config.threshold
         if not cp.any(mask):
             return [], [], []
 
+        mask = mask.get()
         valid_pairs = batch_pairs[mask]
         valid_scores = avg_similarities[mask]
 
@@ -332,8 +333,8 @@ class Matcher(PPRLFeature):
 
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
-        bloom_matrix = cp.asarray(bloom_matrix)
-        unique_ids_arr = cp.asarray(unique_ids_arr)
+        # bloom_matrix = cpbloom_matrix)
+        # unique_ids_arr = cp.asarray(unique_ids_arr)
 
         edges_list = []
         edges_weights_list = []
@@ -341,16 +342,16 @@ class Matcher(PPRLFeature):
                     desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
             if is_dense:
-                batch_indices = cp.arange(start, end)
-                rows, cols = cp.divmod(batch_indices, ids_2)
+                batch_indices = np.arange(start, end)
+                rows, cols = np.divmod(batch_indices, ids_2)
                 cols += self.encoded_data.bounds[0]
-                batch_pairs = cp.column_stack((rows, cols))
+                batch_pairs = np.column_stack((rows, cols))
             else:
                 batch_pairs=idx_pairs[start:end]
             src, tgt, weights = self._predict_batches(batch_pairs,
                                 bloom_matrix, unique_ids_arr)
-            edges_list.append(np.column_stack((src.get(), tgt.get())))
-            edges_weights_list.append(weights.get())
+            edges_list.append(np.column_stack((src, tgt)))
+            edges_weights_list.append(weights)
 
         return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
@@ -378,22 +379,42 @@ class Matcher(PPRLFeature):
 
         id2_arr = (cp.asarray(self.encoded_data.ground_truth.iloc[:, 1].values) + offset)
 
+            # u_ids = np.array(self.matcher_config)
         if self.matcher_config.unique_ids:
-            id_to_idx = {eid: idx \
-                for idx, eid in enumerate(self.matcher_config.unique_ids)}
-            replace_func = cp.vectorize(lambda x: id_to_idx.get(x, x))
-            id1_arr = replace_func(id1_arr)
-            id2_arr = replace_func(id2_arr)
+            unique_ids_gpu = cp.array(self.matcher_config.unique_ids)
+            sort_order = cp.argsort(unique_ids_gpu)
+            sorted_keys = unique_ids_gpu[sort_order]
+            sorted_vals =cp.arange(len(unique_ids_gpu))[sort_order]
+            def map_ids_to_indices(arr, keys, vals):
+                idx = cp.searchsorted(keys, arr)
+                idx = cp.clip(idx, 0, len(keys)- 1)
+                found_mask = keys[idx] == arr
+                return cp.where(found_mask, vals[idx], arr)
 
-        gt_pairs = cp.column_stack((id1_arr, id2_arr))
-        def pack_edges(arr):
+
+            # id_to_idx = {eid: idx \
+                # for idx, eid in enumerate(self.matcher_config.unique_ids)}
+            # replace_func = cp.vectorize(lambda x: id_to_idx.get(x, x))
+            id1_arr = map_ids_to_indices(id1_arr, sorted_keys, sorted_vals).get()
+            id2_arr = map_ids_to_indices(id2_arr, sorted_keys, sorted_vals).get()
+
+        # gt_pairs = cp.column_stack((id1_arr, id2_arr))
+        # def pack_edges(arr):
             """
             Packs a (N, 2) array of int32 indices into a (N,) array of int64.
             This creates a unique hash for every edge so 1D intersection works.
             """
             # Cast to uint64 to ensure we have 64 bits, then shift and OR.
-            return arr[:, 0].astype(cp.uint64) << 32 | arr[:, 1].astype(cp.uint64)
-        matches = cp.intersect1d(pack_edges(edges), pack_edges(gt_pairs))
+            # return arr[:, 0].astype(cp.uint64) << 32 | arr[:, 1].astype(cp.uint64)
+
+        def pack_edges_direct(u,v):
+            return u.astype(np.uint64) << 32 | v.astype(np.uint64)
+        gt_hashes = pack_edges_direct(id1_arr, id2_arr)
+        edges = edges
+        edge_hashes = pack_edges_direct(edges[:, 0], edges[:, 1])
+
+
+        matches = np.intersect1d(cp.asnumpy(edge_hashes), cp.asnumpy(gt_hashes))
         true_positives = matches.shape[0]
         # true_positives = 0
         # for i, id1 in enumerate(id1_arr):

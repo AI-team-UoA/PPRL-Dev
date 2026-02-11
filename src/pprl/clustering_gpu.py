@@ -465,26 +465,28 @@ class KiralyMSMApproximateClustering(AbstractClustering):
 
 
         edges, weights = graph
-        edges_np = edges
+        edges = edges
+        weights = weights
 
 
         if edges.shape[0] == 0:
             return []
 
 
-        edges_cp = cp.asarray(edges)
-        weights_cp = cp.asarray(weights)
-        men = cp.unique(edges_cp[:,0]).get()
-        valid_mask = weights_cp > self.similarity_threshold
-        valid_edges = edges_cp[valid_mask]
-        valid_weights = weights_cp[valid_mask]
+        # edges_cp = cp.asarray(edges)
+        # weights_cp = cp.asarray(weights)
+        men = np.unique(edges[:,0])
+        valid_mask = weights > self.similarity_threshold
+        valid_mask = valid_mask.get()
+        valid_edges = edges[valid_mask]
+        valid_weights = cp.asarray(weights[valid_mask])
 
 
-        key_men_candidates = valid_edges[:, 0].get()
-        men_candidates = valid_edges.get()
+        key_men_candidates = valid_edges[:, 0]
+        men_candidates = valid_edges
 
-        key_women_candidates = valid_edges[:, 1].get()
-        women_candidates = valid_edges.get()
+        key_women_candidates = valid_edges[:, 1]
+        women_candidates = valid_edges
         men_to_indices = defaultdict(list)
 
         batch_size = 10_000
