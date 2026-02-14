@@ -53,22 +53,22 @@ class ConnectedComponentsClustering(AbstractClustering):
         Returns:
             list: list of clusters
         """
-        edges: np.array
-        weights: np.array
 
         start_time = time()
         self.encoded_data = encoded_data
         self.similarity_threshold: float = similarity_threshold
 
         edges, weights = graph
-        edges = cp.asarray(edges)
-        weights = cp.asarray(weights)
         valid_array : np.ndarray
         if self.similarity_threshold is not None:
             all_edges = edges
             all_weights = weights
-            mask = all_weights >= self.similarity_threshold
+            mask = all_weights > self.similarity_threshold
             valid_array = all_edges[mask]
+            del mask
+            cp.get_default_memory_pool().free_all_blocks()
+
+
         else:
             valid_array = edges
 
@@ -101,132 +101,17 @@ class ConnectedComponentsClustering(AbstractClustering):
         deg_u = degrees[edges[:, 0]]
         deg_v = degrees[edges[:, 1]]
         mask = (deg_u == 1) & (deg_v == 1)
+        del deg_u, deg_v, degrees
+        cp.get_default_memory_pool().free_all_blocks()
 
         isolated_edges = edges[mask].get()
+
+        del edges, mask
+        cp.get_default_memory_pool().free_all_blocks()
+
+
         return isolated_edges.tolist()
 
-
-        # edges_df = cudf.DataFrame(
-        #     edges,
-        #     columns=["src", "dst"],
-        #     dtype="int32"
-        #     )
-
-        # # Build graph from edge list (NO CSR!)
-        # # G = cugraph.Graph(directed=False)
-        # deg = cudf.concat([
-        #     edges_df["src"],
-        #     edges_df["dst"]
-        # ]).value_counts().rename("deg")
-
-        # isolated_edges = edges_df[
-        #     (deg.loc[edges_df["src"]].values == 1) &
-        #     (deg.loc[edges_df["dst"]].values == 1)
-        # ]
-
-        # # print(isolated_edges.values.tolist())
-        # return isolated_edges.values.tolist()
-        # # G = rx.PyGraph(multigraph=False)
-
-        # # gc.collect()
-        # # cp.get_default_memory_pool().free_all_blocks()
-        # # rmm.reinitialize(pool_allocator=False)
-
-        # # G.from_cudf_edgelist(
-        # #     edges_df,
-        # #     source="src",
-        # #     destination="dst",
-        # #     edge_attr=None,
-        # #     renumber=True  # important since you already have integer IDs
-        # # )
-
-        # # Run WCC
-        # labels_df = cugraph.connected_components(G)
-
-        # label_counts = labels_df['labels'].value_counts()
-
-        # # 3. Identify labels that strictly have size == 2
-        # # We get the indices (which are the labels) where the count is 2
-        # valid_labels = label_counts[label_counts == 2].index
-
-        # # 4. Filter the dataframe directly
-        # # We keep only rows where the label is in our list of valid_labels
-        # # merge is usually faster than isin for large GPU dataframes
-        # valid_labels_df = cudf.DataFrame({'labels': valid_labels})
-        # filtered_df = labels_df.merge(valid_labels_df, on='labels')
-
-        # # 5. Sort to align pairs
-        # # We sort by 'labels' so the two nodes belonging to the same component end up next to each other.
-        # # We break ties with 'vertex' just to be deterministic.
-        # filtered_df = filtered_df.sort_values(by=['labels', 'vertex'])
-
-        # # 6. Extract the actual Node IDs (vertex column)
-        # sorted_nodes = filtered_df['vertex'].values
-
-        # # 7. Reshape (The Magic Step)
-        # # This works because we filtered for size=2 and sorted by label
-        # result_matrix = sorted_nodes.reshape(-1, 2)
-
-        # # exit(10)
-        # # labels = labels_df['labels'].values
-
-
-        # # # matrix = csr_matrix(
-        # # #     (cp.ones(len(edges)),
-        # # #     (edges[:,0], edges[:,1])),
-        # # #     shape=(n_nodes, n_nodes)
-        # # # )
-        # # # _, labels = connected_components(matrix, directed=False,
-        # # #                                     return_labels=True)
-        # # unique_labels, counts = cp.unique(labels, return_counts=True)
-
-        # # # 3. Identify labels that strictly have size == 2
-        # # # valid_labels is a boolean mask of the unique_labels
-        # # valid_mask = (counts == 2)
-        # # valid_component_ids = unique_labels[valid_mask]
-
-        # # # 4. Filter the nodes
-        # # # 'np.isin' checks which nodes belong to the valid components.
-        # # # We essentially discard all nodes that are part of clusters != 2
-        # # node_mask = cp.isin(labels, valid_component_ids)
-
-        # # # We need the indices of the nodes, not just the boolean mask
-        # # # We sort them by label to ensure the pairs stay together
-        # # valid_node_indices = cp.where(node_mask)[0]
-        # # valid_node_labels = labels[valid_node_indices]
-
-        # # # Sort by label so that pairs are adjacent in the array
-        # # # e.g. [nodeA, nodeB, nodeC, nodeD] where A&B are comp 1, C&D are comp 5
-        # # sort_order = cp.argsort(valid_node_labels)
-        # # sorted_nodes = valid_node_indices[sort_order]
-
-        # # # 5. Reshape into pairs (The Magic Step)
-        # # # Since we filtered for ONLY size 2, the length of sorted_nodes
-        # # # must be even. We can reshape directly into a list of pairs.
-        # # # This is instantaneous compared to a loop.
-        # # result_matrix = sorted_nodes.reshape(-1, 2)
-        # # # sorted_idx = np.argsort(labels)
-        # # # sorted_labels = labels[sorted_idx]
-
-        # # # # Find where the label changes to identify cluster boundaries
-        # # # # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
-        # # # split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
-
-        # # # # Split the original node indices into arrays based on these boundaries
-        # # # clusters = np.split(sorted_idx, split_idx)
-
-        # # # # 4. Filter for clusters of size 2
-        # # # # This list comprehension is now iterating over CLUSTERS, not NODES
-        # # # # (e.g., 500k iterations instead of 100M)
-        # # # resulting_clusters = [c.tolist() for c in clusters if len(c) == 2]
-
-        # # # clusters = [[] for _ in range(n_components)]
-        # # # for node_index, component_index in enumerate(labels):
-        # # #     clusters[component_index].append(node_index)
-
-        # # # resulting_clusters = [c for c in clusters if len(c) == 2]
-
-        # return result_matrix.tolist()
 
 
 
@@ -271,22 +156,20 @@ class UniqueMappingClustering(AbstractClustering):
         self.encoded_data = encoded_data
 
         edges, weights = graph
-        edges = cp.asarray(edges)
-        weights = cp.asarray(weights)
-        mask = weights >= self.similarity_threshold
+        mask = weights > self.similarity_threshold
         valid_edges = edges[mask]
         valid_weights = weights[mask]
+        valid_weights *= -1
+        del mask
+        cp.get_default_memory_pool().free_all_blocks()
 
-        batch_size = 10_000
-        for start in range(0, len(valid_edges), batch_size):
-            end = start + batch_size
-            u = valid_edges[start:end, 0]
-            v = valid_edges[start:end, 1]
-            w = valid_weights[start:end]
+        keys_stack = cp.stack([valid_edges[:,1], valid_edges[:, 0], valid_weights])
+        sort_indices = cp.lexsort(keys_stack)
+        candidates = valid_edges[sort_indices]
+        del keys_stack, sort_indices, valid_edges, valid_weights
+        cp.get_default_memory_pool().free_all_blocks()
 
-            keys_stack = cp.stack([v, u, -w])
-            sort_indices = cp.lexsort(keys_stack) + start
-            candidates = valid_edges[sort_indices]
+
 
         candidates = candidates[:edges.shape[0]*2].get()
         max_node = candidates.max() + 1
@@ -473,37 +356,34 @@ class KiralyMSMApproximateClustering(AbstractClustering):
             return []
 
 
-        # edges_cp = cp.asarray(edges)
-        # weights_cp = cp.asarray(weights)
-        men = np.unique(edges[:,0])
+        men = cp.unique(edges[:,0])
         valid_mask = weights > self.similarity_threshold
-        valid_mask = valid_mask.get()
+        valid_mask = valid_mask
         valid_edges = edges[valid_mask]
-        valid_weights = cp.asarray(weights[valid_mask])
+        valid_weights = weights[valid_mask]
+        del valid_mask
+        cp.get_default_memory_pool().free_all_blocks()
+
+        sorted_indexes = cp.argsort(valid_weights)[::-1]
+        sorted_edges_gpu = valid_edges[sorted_indexes]
+        similarities_gpu =  valid_weights[sorted_indexes]
+        del sorted_indexes
+        cp.get_default_memory_pool().free_all_blocks()
+
+        sorted_edges = sorted_edges_gpu.get()
+        del sorted_edges_gpu
+        cp.get_default_memory_pool().free_all_blocks()
+        similarities = similarities_gpu.get()
+        del similarities_gpu
+        cp.get_default_memory_pool().free_all_blocks()
 
 
-        key_men_candidates = valid_edges[:, 0]
-        men_candidates = valid_edges
+        key_men_candidates = sorted_edges[:, 0]
+        men_candidates = sorted_edges
 
-        key_women_candidates = valid_edges[:, 1]
-        women_candidates = valid_edges
+        key_women_candidates = sorted_edges[:, 1]
         men_to_indices = defaultdict(list)
 
-        batch_size = 10_000
-        indices = []
-        for start in range(0, len(valid_edges), batch_size):
-            chunk = valid_weights[start: start+batch_size]
-            sorted_ids = cp.argsort(-chunk) + start
-            indices.append(sorted_ids.get())
-
-        #  sort
-        sorted_weights_indices = np.concatenate(indices)
-        key_men_candidates = key_men_candidates[sorted_weights_indices]
-        men_candidates = men_candidates[sorted_weights_indices]
-        key_women_candidates = key_women_candidates[sorted_weights_indices]
-        women_candidates = women_candidates[sorted_weights_indices]
-
-        similarities = valid_weights[sorted_weights_indices]
 
         for i, m in enumerate(key_men_candidates):
             men_to_indices[m].append(i)
@@ -563,6 +443,8 @@ class KiralyMSMApproximateClustering(AbstractClustering):
                     else:
                         men_active[index] = False
 
+        # del edges, weights
+        # cp.get_default_memory_pool().free_all_blocks()
         edge_list = [(m, w) for m,w in enumerate(current_matches) if w!=-1]
 
         # Create GPU DataFrame directly
