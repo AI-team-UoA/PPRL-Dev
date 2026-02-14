@@ -3,7 +3,7 @@ Docstring for pprl.clustering
 """
 from __future__ import annotations
 from queue import PriorityQueue
-from collections import defaultdict
+from collections import defaultdict, deque
 from time import time
 from typing import Dict, List, Tuple
 from itertools import chain
@@ -55,12 +55,12 @@ class ConnectedComponentsClustering(AbstractClustering):
         if self.similarity_threshold is not None:
             all_edges = edges
             all_weights = weights
-            mask = all_weights >= self.similarity_threshold
+            mask = all_weights > self.similarity_threshold
             valid_array = all_edges[mask]
         else:
             valid_array = edges
 
-        n_nodes = int(np.max(edges))
+        n_nodes = int(np.max(valid_array))
 
         resulting_clusters = self.scipi_connected_components(
             edges=valid_array,
@@ -84,62 +84,16 @@ class ConnectedComponentsClustering(AbstractClustering):
             return []
 
 
-        matrix = csr_matrix(
-            (np.ones(len(edges)),
-            (edges[:,0], edges[:,1])),
-            shape=(n_nodes, n_nodes)
-        )
-        _, labels = connected_components(matrix, directed=False,
-                                            return_labels=True)
-        unique_labels, counts = np.unique(labels, return_counts=True)
+        flat_nodes = edges.ravel()
+        degrees = np.bincount(flat_nodes, minlength=n_nodes)
+        deg_u = degrees[edges[:, 0]]
+        deg_v = degrees[edges[:, 1]]
+        mask = (deg_u == 1) & (deg_v == 1)
 
-        # 3. Identify labels that strictly have size == 2
-        # valid_labels is a boolean mask of the unique_labels
-        valid_mask = (counts == 2)
-        valid_component_ids = unique_labels[valid_mask]
+        isolated_edges = edges[mask]
+        return isolated_edges.tolist()
 
-        # 4. Filter the nodes
-        # 'np.isin' checks which nodes belong to the valid components.
-        # We essentially discard all nodes that are part of clusters != 2
-        node_mask = np.isin(labels, valid_component_ids)
 
-        # We need the indices of the nodes, not just the boolean mask
-        # We sort them by label to ensure the pairs stay together
-        valid_node_indices = np.where(node_mask)[0]
-        valid_node_labels = labels[valid_node_indices]
-
-        # Sort by label so that pairs are adjacent in the array
-        # e.g. [nodeA, nodeB, nodeC, nodeD] where A&B are comp 1, C&D are comp 5
-        sort_order = np.argsort(valid_node_labels)
-        sorted_nodes = valid_node_indices[sort_order]
-
-        # 5. Reshape into pairs (The Magic Step)
-        # Since we filtered for ONLY size 2, the length of sorted_nodes
-        # must be even. We can reshape directly into a list of pairs.
-        # This is instantaneous compared to a loop.
-        result_matrix = sorted_nodes.reshape(-1, 2)
-        # sorted_idx = np.argsort(labels)
-        # sorted_labels = labels[sorted_idx]
-
-        # # Find where the label changes to identify cluster boundaries
-        # # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
-        # split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
-
-        # # Split the original node indices into arrays based on these boundaries
-        # clusters = np.split(sorted_idx, split_idx)
-
-        # # 4. Filter for clusters of size 2
-        # # This list comprehension is now iterating over CLUSTERS, not NODES
-        # # (e.g., 500k iterations instead of 100M)
-        # resulting_clusters = [c.tolist() for c in clusters if len(c) == 2]
-
-        # clusters = [[] for _ in range(n_components)]
-        # for node_index, component_index in enumerate(labels):
-        #     clusters[component_index].append(node_index)
-
-        # resulting_clusters = [c for c in clusters if len(c) == 2]
-
-        return result_matrix.tolist()
 
 
 
@@ -185,7 +139,7 @@ class UniqueMappingClustering(AbstractClustering):
 
         edges, weights = graph
 
-        mask = weights >= self.similarity_threshold
+        mask = weights > self.similarity_threshold
         valid_edges = edges[mask]
         valid_weights = weights[mask]
 
@@ -210,7 +164,7 @@ class UniqueMappingClustering(AbstractClustering):
 
         clusters = ConnectedComponentsClustering.scipi_connected_components(
             edges=unique_edges,
-            n_nodes=int(np.max(edges)) + 1
+            n_nodes=int(np.max(unique_edges)) + 1
         )
         self.execution_time = time() - start_time
         return clusters
@@ -345,9 +299,9 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         self.similarity_threshold : float
         self.men_candidates = None
         self.women_candidates = None
-        
-        
-    
+
+
+
 
     def process(self,
         graph: Tuple[np.array, np.array],
@@ -378,90 +332,90 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         if number_of_comparisons == 0:
             return clusters
 
-        men : set = set()
-        if self.men_candidates is None:
-            self.men_candidates : dict = defaultdict(list)
-            self.women_candidates : dict = defaultdict(list)
-
-            for i, (u,v) in enumerate(edges.tolist()):
-                man, woman = self.sorted_indicators(u, v)
-                similarity = weights[i]
-                if similarity > self.similarity_threshold:
-                    self.men_candidates[man].append(ExtendedSimilarityEdge(left_node=man,
-                                                                    right_node=woman,
-                                                                    similarity=similarity))
-                    self.women_candidates[woman].append(ExtendedSimilarityEdge(left_node=woman,
-                                                                        right_node=man,
-                                                                        similarity=similarity))
-                men.add(man)
-            self.men = men
-            self.base_candidates = {}
-            for man, candidates in self.men_candidates.items():
-                self.men_candidates[man] = sorted(candidates, reverse=True)
-                self.base_candidates[man] = self.men_candidates[man].copy()
-            for woman, candidates in self.women_candidates.items():
-                self.women_candidates[woman] = sorted(candidates, reverse=True)
-                self.base_candidates[woman] = self.women_candidates[woman].copy()
-
-        else:
-            men = self.men
-            self.men_candidates : dict = defaultdict(list)
-            self.women_candidates : dict = defaultdict(list)
-            for key, candidates in self.base_candidates.items():
-                for e in candidates:
-                    if e.similarity > self.similarity_threshold:
-                        e.active = True
-                        if key < self.encoded_data.bounds[0]:
-                            self.men_candidates[key].append(e)
-                        else:
-                            self.women_candidates[key].append(e)
-                    else:
-                        break
+        men = np.unique(edges[:,0])
 
 
 
-        self.is_bachelor : list = [False] * self.encoded_data.bounds[0]
-        self.is_uncertain : list = [False] * self.encoded_data.bounds[0]
-        self.fiances : list = [-1] * (self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
-        self.current_matches : Dict[any, List[ExtendedSimilarityEdge]] = {}
-        self.free_men : list = list(men)
 
-        while len(self.free_men) > 0:
-            man = self.free_men.pop(0)
-            woman = self.get_first_active_candidate(entity=man)
+        valid_mask = weights > self.similarity_threshold
+        valid_edges = edges[valid_mask]
+        valid_weights = weights[valid_mask]
+        sorted_idx = np.argsort(-valid_weights)
+
+        key_men_candidates = valid_edges[sorted_idx, 0]
+        key_women_candidates = valid_edges[sorted_idx, 1]
+        men_candidates =  valid_edges[sorted_idx]
+        similarities = valid_edges[sorted_idx]
+        men_to_indices = defaultdict(list)
+
+
+        for i, m in enumerate(key_men_candidates):
+            men_to_indices[m].append(i)
+
+        men_len = self.encoded_data.bounds[0]
+        women_len = self.encoded_data.bounds[1] - self.encoded_data.bounds[0]
+        men_active = np.full(men_candidates.shape[0], True, bool)
+        edge_score = np.full((men_len, women_len), -np.inf)
+        edge_index = np.full((men_len, women_len), -1, dtype=int)
+
+        is_bachelor = np.full(men_len, False, bool)
+        is_uncertain = np.full(men_len, False, bool)
+        fiances = np.full(women_len, -1, np.int32)
+        current_matches = np.full(men_len, -1, np.int32)
+
+
+        free_men = deque(men.tolist())
+
+        while free_men:
+            man = free_men.popleft()
+            indices = men_to_indices.get(man, [])
+            if not indices:
+                continue
+
+            indices = np.asarray(indices)
+            active_mask = men_active[indices]
+            if not active_mask.any():
+                woman=-1
+            else:
+                index = indices[active_mask][0]
+                woman = key_women_candidates[index]
 
             if woman == -1:
-                if not self.is_bachelor[man]:
-                    self.is_bachelor[man] = True
-                    if not self.has_candidates(entity=man):
-                        self.free_men.append(man)
-                    self.activate_candidates_of(entity=man)
-                else:
-                    continue
+                if not is_bachelor[man]:
+                    is_bachelor[man] =True
+                    men_active[indices] = True
             else:
-                fiance = self.get_woman_fiance(woman=woman)
+                fiance = fiances[woman - men_len]
+                man_score = similarities[index]
                 if fiance == -1:
-                    self.add_match(man=man, woman=woman, similarity=0.0)
-                    self.set_woman_fiance(woman=woman, fiance=man)
+                    current_matches[man] = woman
+                    edge_score[man, woman-men_len] = man_score
+                    edge_index[man, woman-men_len] = index
+                    fiances[woman - men_len] = man
                 else:
-                    if self.accepts_proposal(woman=woman,
-                                             man=man):
-                        self.remove_match(man=fiance, woman=woman)
-                        self.add_match(man=man, woman=woman, similarity=0.0)
-                        self.set_woman_fiance(woman=woman, fiance=man)
-                        if not self.is_uncertain[fiance]:
-                            self.deactivate_candidate(entity=fiance, candidate=woman)
+                    fiance_score = edge_score[fiance, woman-men_len]
+                    fiance_index = edge_index[fiance, woman-men_len]
+                    if is_uncertain[fiance] or man_score > fiance_score:
+                        current_matches[fiance] = -1
+                        current_matches[man] = woman
+                        edge_score[man, woman-men_len] = man_score
+                        edge_index[man, woman-men_len] = index
+                        fiances[woman - men_len] = man
+                        if not is_uncertain[fiance]:
+                            men_active[fiance_index] = False
                     else:
-                        self.deactivate_candidate(entity=man, candidate=woman)
+                        men_active[index] = False
 
-        new_edges = np.array([
-            (e.left_node, e.right_node)
-            for e in chain.from_iterable(self.current_matches.values())
-        ])
-        n_nodes = np.max(new_edges) + 1
+        mask = current_matches != -1
+        men_ids = np.flatnonzero(mask)
+        women_ids = current_matches[mask]
+        # edge_list = np.array([(m, w) for m,w in enumerate(current_matches) if w!=-1])
+        edge_list = np.column_stack((men_ids, women_ids))
+
+        n_nodes = np.max(edge_list) + 1
         matrix = csr_matrix(
-            (np.ones(new_edges.shape[0]),
-            (new_edges[:,0], new_edges[:,1])),
+            (np.ones(edge_list.shape[0]),
+            (edge_list[:,0], edge_list[:,1])),
             shape=(n_nodes, n_nodes)
         )
         _, labels = connected_components(matrix, directed=False,

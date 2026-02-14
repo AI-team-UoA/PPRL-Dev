@@ -45,6 +45,22 @@ def load_dataframe(path: str, files: tuple, sep: str):
     return d1, d2, gt_index
 
 
+def config_bloom_filter_with_configuration(configuration: dict,
+                    bloom_name, loaded_dataframe):
+    """Configure new bloom filter with configuration"""
+
+    config = BloomFilterConfig(**configuration)
+    bl = BloomFilter(config)
+    bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[0])
+    bloom_filters.to_file(f'{bloom_name}_1.pkl')
+
+    bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[1])
+    bloom_filters.to_file(f'{bloom_name}_2.pkl')
+    new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
+
+    new_bloom.set_ground_truth(loaded_dataframe[2])
+    return configuration, new_bloom
+
 def config_bloom_filter(attributes,
         size, qgrams, bloom_name,
         loaded_dataframe, adjacent_config: dict):

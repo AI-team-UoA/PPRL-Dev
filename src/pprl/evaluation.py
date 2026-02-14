@@ -2,7 +2,7 @@
 This file contains all the methods for evaluating every module in pyjedai.
 """
 import numpy as np
-import cupy as cp
+# import cupy as cp
 from typing import List, Tuple, Dict
 from warnings import warn
 import random
@@ -201,7 +201,7 @@ class Evaluation:
         :return: Description
         :rtype: dict
         """
-        
+
         _limit = self.encoded_data.bounds[0]
         _d2_limit = self.encoded_data.bounds[1]
         # print(clusters)
@@ -222,7 +222,7 @@ class Evaluation:
         entity_index[entities_flat] = cluster_ids_flat
 
         return entity_index
-    
+
     def create_entity_index_from_clusters(
             self,
             clusters: list,
@@ -237,7 +237,7 @@ class Evaluation:
         :return: Description
         :rtype: dict
         """
-        
+
         if gpu:
             return self._create_entity_index_from_clusters_gpu(clusters)
         _limit = self.encoded_data.bounds[0]
