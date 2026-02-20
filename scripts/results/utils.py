@@ -59,7 +59,7 @@ def config_bloom_filter_with_configuration(configuration: dict,
     new_bloom = BloomEncodedData.from_file(f'{bloom_name}_1.pkl', f'{bloom_name}_2.pkl')
 
     new_bloom.set_ground_truth(loaded_dataframe[2])
-    return configuration, new_bloom
+    return new_bloom
 
 def config_bloom_filter(attributes,
         size, qgrams, bloom_name,
