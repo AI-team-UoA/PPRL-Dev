@@ -4,7 +4,6 @@ import pandas as pd
 from tqdm import tqdm
 from utils import load_dataframe, config_bloom_filter, \
     config_bloom_filter_with_configuration
-import cupy as cp
 from pathlib import Path
 
 # Enable managed memory to allow oversubscribing GPU memory
@@ -22,6 +21,14 @@ if __name__ == '__main__':
     attributes = ['title', 'starring']
     SEP = "|"
 
+    # DIR = "D10"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'imdbclean'
+    # FILE2 = 'dbpediaclean'
+    # attributes = ['title', 'starring']
+    # SEP = "|"
+
+    
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
 
@@ -35,7 +42,7 @@ if __name__ == '__main__':
     TOTAL_LENGTH = 32
     adjacent_config = {'0' :[]}
 
-    for num_hashes in range(1, 33):
+    for num_hashes in tqdm(range(2, 8), total=6):
         configuration = {'attributes': attributes,
             'size': size,
             'offset': 0,
@@ -45,35 +52,31 @@ if __name__ == '__main__':
             'qgrams': qgrams
         }
 
-        Path(f".graphs/bloom_{configuration['num_hashes']}").mkdir(parents=True,
-                                                            exist_ok=True)
         new_bloom = config_bloom_filter_with_configuration(configuration,
                     BLOOM_NAME, loaded_dataframe)
 
         graph_path = f".graphs/bloom_{num_hashes}"
+
         for metric in ['cosine', 'dice', 'jaccard']:
+            graph_file_name = f'{graph_path}/{metric}/graph_1.pkl'
+            with open(graph_file_name, "rb") as f:
+                graph_dict = pickle.load(f)
+            graph = graph_dict['edges'], graph_dict['weights']
             for similarity in tqdm(range(5, 100, 5), total=19):
-                graph_index = similarity // 5
-                graph = None
-                graph_file_name = f'{graph_path}/{metric}/graph_{graph_index}.pkl'
+                thr = similarity / 100
+                edges, weights = graph
+                mask = thr <= weights
+                edges = edges[mask]
+                weights = weights[mask]
+                graph = edges, weights
 
                 for cl in [KiralyMSMApproximateClustering,
                         ConnectedComponentsClustering,
                         UniqueMappingClustering
                     ]:
-                    with open(graph_file_name, "rb") as f:
-                        graph = pickle.load(f)
-
-                    edges = graph['edges']
-                    weights = cp.asnumpy(graph['weights'])
-
-                    n_graph = edges, weights
-
-                    thr = similarity / 100
-
 
                     clustering_method = cl()
-                    clusters = clustering_method.process(n_graph, new_bloom, thr)
+                    clusters = clustering_method.process(graph, new_bloom, thr)
                     ev_cl = clustering_method.evaluate(clusters, verbose=False)
                     cluster_ev = {
                         'name': f'Clustering with {cl.__name__}',

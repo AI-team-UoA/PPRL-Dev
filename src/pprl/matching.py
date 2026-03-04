@@ -372,6 +372,8 @@ class Matcher(PPRLFeature):
             raise AttributeError("Can not proceed to evaluation without a ground-truth file. " +
                     "Encoded Data object the ground-truth file has not been set.")
         edges, _ = prediction
+
+        edges = edges.astype(np.int32)
         eval_obj = Evaluation(self.encoded_data)
         true_positives = 0
         total_matching_pairs = edges.shape[0]
@@ -390,7 +392,7 @@ class Matcher(PPRLFeature):
             id1_arr = replace_func(id1_arr)
             id2_arr = replace_func(id2_arr)
 
-        gt_pairs = np.column_stack((id1_arr, id2_arr))
+        gt_pairs = np.column_stack((id1_arr, id2_arr)).astype(np.int32)
 
         def as_void(arr):
             return arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))

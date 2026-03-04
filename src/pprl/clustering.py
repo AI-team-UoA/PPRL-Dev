@@ -324,33 +324,35 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         edges, weights = graph
 
         start_time = time()
+
+
+
         self.similarity_threshold : float = similarity_threshold
         self.encoded_data = encoded_data
-        number_of_comparisons : int = edges.shape[0]
-        clusters : list = []
 
-        if number_of_comparisons == 0:
-            return clusters
+        if edges.shape[0] == 0:
+            return []
+
 
         men = np.unique(edges[:,0])
-
-
-
-
         valid_mask = weights > self.similarity_threshold
         valid_edges = edges[valid_mask]
         valid_weights = weights[valid_mask]
-        sorted_idx = np.argsort(-valid_weights)
+        sorted_idx = np.argsort(valid_weights)[::-1]
 
-        key_men_candidates = valid_edges[sorted_idx, 0]
-        key_women_candidates = valid_edges[sorted_idx, 1]
-        men_candidates =  valid_edges[sorted_idx]
-        similarities = valid_edges[sorted_idx]
+        sorted_edges = valid_edges[sorted_idx]
+        similarities = valid_weights[sorted_idx]
+
+        key_men_candidates = sorted_edges[:, 0]
+        men_candidates = sorted_edges
+
+        key_women_candidates = sorted_edges[:, 1]
+
         men_to_indices = defaultdict(list)
-
 
         for i, m in enumerate(key_men_candidates):
             men_to_indices[m].append(i)
+
 
         men_len = self.encoded_data.bounds[0]
         women_len = self.encoded_data.bounds[1] - self.encoded_data.bounds[0]
@@ -425,17 +427,9 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         sorted_idx = np.argsort(labels)
         sorted_labels = labels[sorted_idx]
 
-        # Find where the label changes to identify cluster boundaries
-        # returns indices where the label shifts (e.g., from cluster 0 to cluster 1)
         split_idx = np.flatnonzero(np.diff(sorted_labels) > 0) + 1
 
-        # Split the original node indices into arrays based on these boundaries
         clusters = np.split(sorted_idx, split_idx)
-        # clusters = [[] for _ in range(n_components)]
-        # for node_index, component_index in enumerate(labels):
-        #     clusters[component_index].append(node_index)
-
-        # clusters = list(connected_components(new_graph))
         self.execution_time = time() - start_time
         return clusters
 

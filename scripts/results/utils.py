@@ -1,13 +1,16 @@
 """Utils for Results Generation"""
 from typing import Dict
 from itertools import product
+import gc
+import os
 import pickle
 import pandas as pd
+import time
 from tqdm import tqdm
 import ray
 import ray.actor
 from pprl.matching import Matcher
-
+import numpy as np
 from pprl.comparison_cleaning import AbstractMetablocking
 from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 from pprl.clustering import AbstractClustering, UniqueMappingClustering, \
@@ -287,3 +290,116 @@ def clustering_ray(new_bloom: BloomEncodedData,
     #         evaluations[cl.__name__].append(cluster_ev)
 
     # return matcher_ev, evaluations, metric
+
+
+def update_graph(graph: tuple, thr: float):
+    """Updates graph with new threshold"""
+    edges, weights = graph
+
+    del graph
+    mask = thr < weights
+
+    new_edges = edges[mask].astype(np.int32)
+    del edges
+
+    new_weights = weights[mask].astype(np.float32)
+    del weights, mask
+
+    gc.collect()
+    return new_edges, new_weights
+
+
+
+@ray.remote
+def matching_clustering_ray(new_bloom: BloomEncodedData,
+                        configuration: dict,
+                        metric: str,
+                        RESULTS: str, RESULTS_CLUSTERING: str):
+    """Matching and Clustering with ray"""
+
+    print(f"Running for {metric}")
+    start = time.time()
+    similarity = 5
+    thr = similarity / 100
+
+    matcher = Matcher(batch_size=100_000,
+        threshold = thr,
+        metric=metric)
+    graph = matcher.predict(new_bloom)
+
+
+    kiraly = KiralyMSMApproximateClustering()
+    connected = ConnectedComponentsClustering()
+    unique = UniqueMappingClustering()
+
+    matchers_ev = []
+    kiraly_ev = []
+    connected_ev = []
+    unique_ev = []
+    for similarity in range(5, 100, 5):
+        if similarity != 5:
+            thr = similarity / 100
+            graph = update_graph(graph, thr)
+
+        edges, _ = graph
+
+        ev = matcher.evaluate(graph, verbose=False)
+        matcher_ev = {
+            'name': f'Matching with {metric}',
+            'total_matches': edges.shape[0],
+            'similarity_threshold': thr}
+        for keys, items in ev.items():
+            matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+        matcher_ev['config'] = configuration
+
+        matchers_ev.append(matcher_ev)
+
+        for cl in [connected, kiraly, unique]:
+            clustering_name = cl.__class__.__name__
+            clusters = cl.process(graph, new_bloom, thr)
+            ev_cl = cl.evaluate(clusters, verbose=False)
+            cluster_ev = {
+                'name': f'Clustering with {clustering_name}',
+                'total_clusters': len(clusters),
+                'threshold': thr,
+                'matcher': metric,
+            }
+            for keys, items in ev_cl.items():
+                cluster_ev[keys] = round(items, 2) if isinstance(items, float) else items
+            cluster_ev['config'] = configuration
+
+            if clustering_name == 'ConnectedComponentsClustering':
+                connected_ev.append(cluster_ev)
+            elif clustering_name == 'KiralyMSMApproximateClustering':
+                kiraly_ev.append(cluster_ev)
+            elif clustering_name == 'UniqueMappingClustering':
+                unique_ev.append(cluster_ev)
+
+
+    matcher_filename = f"{metric}.csv"
+    loaded = os.path.exists(f"{RESULTS}/{matcher_filename}")
+    df = pd.DataFrame(matchers_ev)
+    df.to_csv(f'{RESULTS}/{matcher_filename}', mode='a+', index=False,
+              header=not loaded)
+
+
+    kiraly_filename = f"{kiraly.__class__.__name__}_{metric}.csv"
+    loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{kiraly_filename}")
+    df = pd.DataFrame(kiraly_ev)
+    df.to_csv(f'{RESULTS_CLUSTERING}/{kiraly_filename}', mode='a+', index=False,
+              header=not loaded)
+
+    connected_filename = f"{connected.__class__.__name__}_{metric}.csv"
+    loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{connected_filename}")
+    df = pd.DataFrame(connected_ev)
+    df.to_csv(f'{RESULTS_CLUSTERING}/{connected_filename}', mode='a+', index=False,
+              header=not loaded)
+
+    unique_filename = f"{unique.__class__.__name__}_{metric}.csv"
+    loaded = os.path.exists(f"{RESULTS_CLUSTERING}/{unique_filename}")
+    df = pd.DataFrame(unique_ev)
+    df.to_csv(f'{RESULTS_CLUSTERING}/{unique_filename}', mode='a+', index=False,
+              header=not loaded)
+
+    return time.time() - start, metric
