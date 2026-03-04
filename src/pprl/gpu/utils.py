@@ -75,7 +75,7 @@ def _math_dice(intersecntion: int, cadinality_a : int, cardinality_b : int) -> f
 
 
 
-def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
+def _dice(blooms_1 : cp.array, blooms_2 : cp.array) -> cp.array:
     intersection_bytes = cp.bitwise_and(blooms_1, blooms_2)
     intersections = intersection_bytes.sum(axis=2)
 
@@ -91,7 +91,7 @@ def _dice(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
     return avg_similarities
 
 
-def _jaccard(blooms_1: np.array, blooms_2: np.array):
+def _jaccard(blooms_1: cp.array, blooms_2: cp.array):
     intersection_bytes = cp.bitwise_and(blooms_1, blooms_2)
     intersections = intersection_bytes.sum(axis=2)
 
@@ -107,7 +107,7 @@ def _jaccard(blooms_1: np.array, blooms_2: np.array):
     return avg_similarities
 
 
-def _cosine(blooms_1: np.array, blooms_2: np.array):
+def _cosine(blooms_1: cp.array, blooms_2: cp.array):
     intersection_bytes = cp.bitwise_and(blooms_1, blooms_2)
     intersections = intersection_bytes.sum(axis=2)
 
@@ -124,7 +124,7 @@ def _cosine(blooms_1: np.array, blooms_2: np.array):
 
 
 
-def _scm(blooms_1 : np.array, blooms_2 : np.array) -> np.array:
+def _scm(blooms_1 : cp.array, blooms_2 : cp.array) -> cp.array:
     length = blooms_1.shape[2]
     xor_bytes = cp.bitwise_xor(blooms_1, blooms_2)
     xor_sum = xor_bytes.sum(axis=2)
