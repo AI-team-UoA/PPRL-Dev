@@ -1,17 +1,14 @@
 """Evaluation module
 This file contains all the methods for evaluating every module in pyjedai.
 """
-import numpy as np
-# import cupy as cp
 from typing import List, Tuple, Dict
 from warnings import warn
 import random
 from dataclasses import dataclass, field
-
-
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
+import numpy as np
 
 from pprl.datamodel import Block, EncodedData
 from pprl.utils import PredictionData, generate_unique_identifier, batch_pairs
@@ -188,45 +185,9 @@ class Evaluation:
         return results_dict
 
 
-    def _create_entity_index_from_clusters_gpu(
-            self,
-            clusters: list
-    ) -> dict:
-        """
-        Docstring for _create_entity_index_from_clusters_gpu
-
-        :param self: Description
-        :param clusters: Description
-        :type clusters: list
-        :return: Description
-        :rtype: dict
-        """
-
-        _limit = self.encoded_data.bounds[0]
-        _d2_limit = self.encoded_data.bounds[1]
-        # print(clusters)
-        # all_gt_ids: set = set(range(_d2_limit))
-        entity_index = cp.full(_d2_limit, -1, dtype=cp.int32)
-
-        if not clusters:
-            return entity_index
-
-
-        cluster_lens = [len(c) for c in clusters]
-        cluster_ids_flat = cp.repeat(cp.arange(len(clusters)), cluster_lens)
-        entities_flat = cp.concatenate([cp.array(list(c)) for c in clusters])
-        is_d1 = entities_flat < _limit
-        d1_counts = cp.bincount(cluster_ids_flat, weights=is_d1, minlength=len(clusters))
-        d2_counts = cp.array(cluster_lens) - d1_counts
-        self.cm.total_matching_pairs += int(cp.sum(d1_counts * d2_counts))
-        entity_index[entities_flat] = cluster_ids_flat
-
-        return entity_index
-
     def create_entity_index_from_clusters(
             self,
             clusters: list,
-            gpu: bool = False
     ) -> dict:
         """
         Docstring for create_entity_index_from_clusters
@@ -238,8 +199,6 @@ class Evaluation:
         :rtype: dict
         """
 
-        if gpu:
-            return self._create_entity_index_from_clusters_gpu(clusters)
         _limit = self.encoded_data.bounds[0]
         _d2_limit = self.encoded_data.bounds[1]
         # print(clusters)

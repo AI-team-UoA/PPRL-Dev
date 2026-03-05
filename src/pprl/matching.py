@@ -42,7 +42,6 @@ class Matcher(PPRLFeature):
         threshold : float = 0.6,
         metric : Literal["dice", "scm", 'jaccard', "cosine"] = "dice",
         attributes : List[str] = None,
-        concat_bf : bool = False
     ) -> None:
         super().__init__()
         self.matcher_config = MatcherConfig(batch_size=batch_size,
@@ -135,7 +134,8 @@ class Matcher(PPRLFeature):
     def predict(self,
                 encoded_data: EncodedData,
                 blocks: Dict[str, Block] = None,
-                **kwargs) -> tuple:
+                # **kwargs
+                ) -> tuple:
         """
         Vectorized  similarity computation for Bloom filters or HE.
 
@@ -252,7 +252,8 @@ class Matcher(PPRLFeature):
         }
 
 
-        _metric = metrics_dict.get(self.matcher_config.metric, metrics_dict['dice'])
+        _metric = metrics_dict.get(self.matcher_config.metric,
+                            metrics_dict['dice'])
 
         avg_similarities : np.array = _metric(
                 bloom_matrix[batch_pairs[:,0]],
@@ -307,60 +308,75 @@ class Matcher(PPRLFeature):
 
         return bloom_filter_matrix
 
-    def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> Graph:
-        is_dense = False
-
-        attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-            else encoded_data.attributes
-
-        n_candidates = 0
-        # graph = Graph()
-        #TODO: Check this after experiments
-        if self.matcher_config.unique_ids:
-            id_to_idx = {eid: idx \
+    def _get_unique_ids(self) -> tuple:
+        id_to_idx = {eid: idx \
                 for idx, eid in enumerate(self.matcher_config.unique_ids)}
-            unique_ids_arr = np.array(self.matcher_config.unique_ids)
+        unique_ids_arr = np.array(self.matcher_config.unique_ids)
 
-            idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
-                                for eid1, eid2 in self.matcher_config.candidates])
-            n_candidates = len(idx_pairs)
-            # graph.add_nodes_from([None] * len(id_to_idx))
-        else:
-            is_dense = True
-            unique_ids_arr = np.arange(0, self.encoded_data.bounds[1])
-            ids_1 = self.encoded_data.bounds[0]
-            ids_2 = self.encoded_data.bounds[1] - ids_1
-            n_candidates = ids_1 * ids_2
-            # graph.add_nodes_from([None] * n_candidates)
+        idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
+                        for eid1, eid2 in self.matcher_config.candidates])
+        n_candidates = len(idx_pairs)
+        return n_candidates, unique_ids_arr, idx_pairs
 
-        bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
+    def _get_unique_ids_dense(self) -> tuple:
+        unique_ids_arr = np.arange(0, self.encoded_data.bounds[1])
+        ids_1 = self.encoded_data.bounds[0]
+        ids_2 = self.encoded_data.bounds[1] - ids_1
+        n_candidates = ids_1 * ids_2
+        return n_candidates, unique_ids_arr
 
+    def _match_all(self, n_candidates: int,
+        bloom_matrix: np.array, unique_ids_arr: np.array,
+        idx_pairs: np.array = None) -> tuple:
 
         edges_list = []
         edges_weights_list = []
         for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
                     desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
-            if is_dense:
-                batch_indices = np.arange(start, end)
-                rows, cols = np.divmod(batch_indices, ids_2)
-                cols += self.encoded_data.bounds[0]
-                batch_pairs = np.column_stack((rows, cols))
-            else:
-                batch_pairs=idx_pairs[start:end]
+            batch_pairs=idx_pairs[start:end]
             src, tgt, weights = self._predict_batches(batch_pairs,
                                 bloom_matrix, unique_ids_arr)
             edges_list.append(np.column_stack((src, tgt)))
             edges_weights_list.append(weights)
-            # print(src)
-            # print(tgt)
-            # print(weights)
-            # edges = np.concatenate(
-            #     [edges, np.column_stack((src, tgt, weights))], axis=0)
-            # print(edges)
-            # exit(10)
 
         return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
+
+    def _match_all_is_dense(self, n_candidates: int,
+        bloom_matrix: np.array, unique_ids_arr: np.array) -> tuple:
+
+        edges_list = []
+        edges_weights_list = []
+        for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
+                    desc="Predicting batches", position=1, leave=False):
+            end = min(start + self.matcher_config.batch_size, n_candidates)
+            batch_indices = np.arange(start, end)
+            rows, cols = np.divmod(batch_indices,
+                            self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
+            cols += self.encoded_data.bounds[0]
+            batch_pairs = np.column_stack((rows, cols))
+            src, tgt, weights = self._predict_batches(batch_pairs,
+                                bloom_matrix, unique_ids_arr)
+            edges_list.append(np.column_stack((src, tgt)))
+            edges_weights_list.append(weights)
+        return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
+
+    def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
+
+        attributes = self.matcher_config.attributes if self.matcher_config.attributes \
+            else encoded_data.attributes
+
+        n_candidates = 0
+        bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
+
+
+        if self.matcher_config.unique_ids:
+            n_candidates, unique_ids_arr, idx_pairs = self._get_unique_ids()
+            return self._match_all(n_candidates, bloom_matrix, unique_ids_arr, idx_pairs)
+
+        n_candidates, unique_ids_arr = self._get_unique_ids_dense()
+        return self._match_all_is_dense(n_candidates, bloom_matrix, unique_ids_arr)
+
 
     def evaluate(self,
                 prediction : np.array,
@@ -378,9 +394,6 @@ class Matcher(PPRLFeature):
 
         edges = edges.astype(np.int32)
         eval_obj = Evaluation(self.encoded_data)
-        true_positives = 0
-        total_matching_pairs = edges.shape[0]
-        # total_matching_pairs = prediction.num_edges()
 
 
         id1_arr = self.encoded_data.ground_truth.iloc[:, 0].values
@@ -400,15 +413,9 @@ class Matcher(PPRLFeature):
         def as_void(arr):
             return arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
         matches = np.intersect1d(as_void(edges), as_void(gt_pairs))
-        true_positives = matches.shape[0]
-        # true_positives = 0
-        # for i, id1 in enumerate(id1_arr):
-        #     id2 = id2_arr[i]
-        #     if prediction.has_edge(id1, id2):
-        #         true_positives += 1
 
-        eval_obj.calculate_scores(true_positives=true_positives,
-                                  total_matching_pairs=total_matching_pairs)
+        eval_obj.calculate_scores(true_positives=matches.shape[0],
+                                  total_matching_pairs=edges.shape[0])
         return eval_obj.report(self.method_configuration(),
                                 export_to_df,
                                 with_classification_report,

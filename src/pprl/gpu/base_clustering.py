@@ -7,7 +7,7 @@ from tqdm.autonotebook import tqdm
 import pandas as pd
 from pprl.datamodel import PPRLFeature
 from pprl.encoded_data import BloomEncodedData
-from pprl.evaluation import Evaluation
+from pprl.gpu.evaluation import Evaluation
 
 RANDOM_SEED = 42
 

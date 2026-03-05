@@ -366,7 +366,6 @@ class Matcher(PPRLFeature):
 
 
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
-        # is_dense = False
 
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
             else encoded_data.attributes
