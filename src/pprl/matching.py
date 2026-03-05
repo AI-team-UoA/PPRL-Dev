@@ -4,22 +4,21 @@ import time
 from itertools import combinations, product
 from typing import Literal, List, Dict, overload, Tuple, Union, Set
 from dataclasses import dataclass
-
 import numpy as np
-from rustworkx import PyGraph as Graph
 from ordered_set import OrderedSet
-# from openfhe import CCParamsBGVRNS, SecurityLevel, \
-#     CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
 from tqdm.auto import tqdm
 import pandas as pd
 
 from pprl.utils import _dice, _scm, _cosine, _jaccard
-# import pprl.openfhe_similarity
 from pprl.datamodel import  Block, EncodedData
 from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
 from pprl.evaluation import Evaluation
 from pprl.datamodel import PPRLFeature
 
+# NOTE: OPENFHE
+# import pprl.openfhe_similarity
+# from openfhe import CCParamsBGVRNS, SecurityLevel, \
+#     CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
 
 
 @dataclass
@@ -31,7 +30,6 @@ class MatcherConfig:
     attributes : List[str]
     candidates : Set
     unique_ids : OrderedSet
-    concat_bf : bool = False
 
 class Matcher(PPRLFeature):
     """Matcher class for pprl"""
@@ -49,13 +47,14 @@ class Matcher(PPRLFeature):
         super().__init__()
         self.matcher_config = MatcherConfig(batch_size=batch_size,
             threshold=threshold, metric=metric,
-            attributes=attributes, candidates=None, unique_ids=None, concat_bf=concat_bf)
+            attributes=attributes, candidates=None, unique_ids=None)
         self.execution_time : float = 0.0
         self.encoded_data : EncodedData
         self.ground_truth : pd.DataFrame
 
-        self.cc : CryptoContext
-        self.key_pair : KeyPair
+        # NOTE: OPENFHE
+        # self.cc : CryptoContext
+        # self.key_pair : KeyPair
 
 
 
@@ -98,7 +97,7 @@ class Matcher(PPRLFeature):
             encoded_data: HomomorphicEcnodedData,
             blocks : Dict[str, Block] = None,
             type_of_match: Literal['overlap', 'extension'] = 'overlap',
-            homomorphism : Literal['bgvs'] = 'bgvs') -> Graph:
+            homomorphism : Literal['bgvs'] = 'bgvs') -> tuple:
         """
         Similarity Computaation for Homomorphic Encrypted Data
 
@@ -118,7 +117,7 @@ class Matcher(PPRLFeature):
     @overload
     def predict(self,
                 encoded_data : BloomEncodedData,
-                blocks: Dict[str, Block] = None)  -> Graph:
+                blocks: Dict[str, Block] = None)  -> tuple:
         """
         Vectorized  similarity computation for Bloom filters.
 
@@ -136,7 +135,7 @@ class Matcher(PPRLFeature):
     def predict(self,
                 encoded_data: EncodedData,
                 blocks: Dict[str, Block] = None,
-                **kwargs) -> Graph:
+                **kwargs) -> tuple:
         """
         Vectorized  similarity computation for Bloom filters or HE.
 
@@ -165,10 +164,11 @@ class Matcher(PPRLFeature):
 
         if isinstance(encoded_data, BloomEncodedData):
             self._method_info = """Matching with Bloom Filters"""
-            return self._predict_from_bloom(encoded_data)
+            graph = self._predict_from_bloom(encoded_data)
         elif isinstance(encoded_data, HomomorphicEcnodedData):
-            self._method_info = """Matching with Homomorhpic Encoded Data """
-            graph = self._predict_from_vector(encoded_data, **kwargs)
+            raise NotImplementedError("Homomorphic matching is not implemented yet.")
+            # self._method_info = """Matching with Homomorhpic Encoded Data """
+            # graph = self._predict_from_vector(encoded_data, **kwargs)
         else:
             raise TypeError(f"encoded_data must be of type: BloomEncodedData \
                 or HomomorphicEcnodedData, but its {type(encoded_data)}")
@@ -176,27 +176,29 @@ class Matcher(PPRLFeature):
         self.execution_time = time.time() - start_time
         return graph
 
-    def _bgvs(self) -> None:
-        parameters = CCParamsBGVRNS()
-        sigma = 3.2                       # palisade: sigma
-        security_level = SecurityLevel.HEStd_128_classic
+    # NOTE: OPENFHE
+    # def _bgvs(self) -> None:
+    #     parameters = CCParamsBGVRNS()
+    #     sigma = 3.2                       # palisade: sigma
+    #     security_level = SecurityLevel.HEStd_128_classic
 
-        parameters.SetStandardDeviation(sigma)   # set sigma
-        parameters.SetSecurityLevel(security_level)
-        parameters.SetPlaintextModulus(65537)  # plaintext_modulus
-        parameters.SetMultiplicativeDepth(1)
+    #     parameters.SetStandardDeviation(sigma)   # set sigma
+    #     parameters.SetSecurityLevel(security_level)
+    #     parameters.SetPlaintextModulus(65537)  # plaintext_modulus
+    #     parameters.SetMultiplicativeDepth(1)
 
-        self.cc : CryptoContext = GenCryptoContext(parameters)
-        self.cc.Enable(PKESchemeFeature.PKE)  # palisade encryption
-        self.cc.Enable(PKESchemeFeature.LEVELEDSHE) #palisade she
-        self.cc.Enable(PKESchemeFeature.ADVANCEDSHE) #palisade she
-        # Generate a public/private key pair
-                                            # Palisade code
-        self.key_pair : KeyPair = self.cc.KeyGen()  # LPKeyPair<DCRTPoly> keyPair;
-                                            # keyPair = cc->KeyGen();
+    #     self.cc : CryptoContext = GenCryptoContext(parameters)
+    #     self.cc.Enable(PKESchemeFeature.PKE)  # palisade encryption
+    #     self.cc.Enable(PKESchemeFeature.LEVELEDSHE) #palisade she
+    #     self.cc.Enable(PKESchemeFeature.ADVANCEDSHE) #palisade she
+    #     # Generate a public/private key pair
+    #                                         # Palisade code
+    #     self.key_pair : KeyPair = self.cc.KeyGen()  # LPKeyPair<DCRTPoly> keyPair;
+    #                                         # keyPair = cc->KeyGen();
 
-        # Generate the relinearization key
-        self.cc.EvalSumKeyGen(self.key_pair.secretKey)      # cc->EvalSumKeyGen(keyPair.secretKey);
+    #     # Generate the relinearization key
+    #     self.cc.EvalSumKeyGen(self.key_pair.secretKey)
+    # # cc->EvalSumKeyGen(keyPair.secretKey);
 
 
     def _configuration(self):
@@ -206,35 +208,36 @@ class Matcher(PPRLFeature):
             "attributes": self.matcher_config.attributes }
 
 
+    # NOTE: OPENFHE
     def _predict_from_vector(self, encoded_data: HomomorphicEcnodedData,
             type_of_match: Literal['overlap', 'extension'] = 'overlap',
-            homomorphism : Literal['bgvs'] = 'bgvs' ) -> Graph:
+            homomorphism : Literal['bgvs'] = 'bgvs' ) -> tuple:
+        raise NotImplementedError("Homomorphic matching is not implemented yet.")
+        # if homomorphism == 'bgvs':
+        #     self._bgvs()
 
-        if homomorphism == 'bgvs':
-            self._bgvs()
+        # matching_function = f'_{type_of_match}_jaccard'
+        # matching_function = getattr(src.pprl.openfhe_similarity, matching_function)
 
-        matching_function = f'_{type_of_match}_jaccard'
-        matching_function = getattr(src.pprl.openfhe_similarity, matching_function)
+        # attributes = self.matcher_config.attributes if self.matcher_config.attributes \
+        #     else encoded_data.attributes
 
-        attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-            else encoded_data.attributes
+        # graph : Graph = Graph()
 
-        graph : Graph = Graph()
+        # homomorphic_dict = encoded_data.encoded_dict
 
-        homomorphic_dict = encoded_data.encoded_dict
+        # for id1, id2 in self.matcher_config.candidates:
+        #     similarity = 0.0
+        #     encoded_1 = homomorphic_dict[id1]
+        #     encoded_2 = homomorphic_dict[id2]
+        #     for attr in attributes:
+        #         similarity += matching_function(self.cc, self.key_pair,
+        #                                        encoded_1[attr], encoded_2[attr])
+        #     avg_similarity = similarity / len(attributes)
+        #     if avg_similarity >= self.matcher_config.threshold:
+        #         graph.add_edge(id1, id2, weight=avg_similarity)
 
-        for id1, id2 in self.matcher_config.candidates:
-            similarity = 0.0
-            encoded_1 = homomorphic_dict[id1]
-            encoded_2 = homomorphic_dict[id2]
-            for attr in attributes:
-                similarity += matching_function(self.cc, self.key_pair,
-                                               encoded_1[attr], encoded_2[attr])
-            avg_similarity = similarity / len(attributes)
-            if avg_similarity >= self.matcher_config.threshold:
-                graph.add_edge(id1, id2, weight=avg_similarity)
-
-        return graph
+        # return graph
 
     def _predict_batches(self,
             batch_pairs : np.array,
