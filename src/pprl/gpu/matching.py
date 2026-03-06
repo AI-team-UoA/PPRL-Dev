@@ -50,14 +50,22 @@ class Matcher(PPRLFeature):
             threshold=threshold, metric=metric,
             attributes=attributes, candidates=None, unique_ids=None)
         self.execution_time : float = 0.0
-        self.encoded_data : EncodedData
+        self.encoded_data : BloomEncodedData
         self.ground_truth : pd.DataFrame
 
         # NOTE: OPENFHE
         # self.cc : CryptoContext
         # self.key_pair : KeyPair
 
-
+    def update_graph(self, graph: tuple, threshold: float) -> tuple:
+        self.matcher_config.threshold = threshold
+        edges_cpu, weights_cpu = graph
+        edges = cp.asarray(edges_cpu)
+        weights = cp.asarray(weights_cpu)
+        mask = self.matcher_config.threshold < weights
+        edges = edges[mask]
+        weights = weights[mask]
+        return edges, weights
 
     def _candidates(self,
             extract_candidates: Union[Dict[str, Block], EncodedData]) -> Tuple[set, OrderedSet]:
@@ -158,7 +166,7 @@ class Matcher(PPRLFeature):
 
         if blocks:
             self.matcher_config.candidates, self.matcher_config.unique_ids = \
-            self._candidates(blocks)
+                self._candidates(blocks)
         else:
             self.matcher_config.candidates = self.matcher_config.unique_ids = None
 
@@ -277,7 +285,7 @@ class Matcher(PPRLFeature):
                             encoded_data: BloomEncodedData) -> np.array:
 
         n_attrs = len(attributes)
-        length = encoded_data.length
+        length = encoded_data.metadata.length
 
         if self.matcher_config.unique_ids is None:
             bloom_filter_matrix = np.zeros((self.encoded_data.bounds[1],
@@ -295,7 +303,7 @@ class Matcher(PPRLFeature):
             return bloom_filter_matrix
 
         n_ids = len(self.matcher_config.unique_ids)
-        length = encoded_data.length
+        length = encoded_data.metadata.length
 
         bloom_filter_matrix = np.zeros((n_ids, n_attrs, length), dtype=bool)
 
@@ -368,7 +376,7 @@ class Matcher(PPRLFeature):
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
 
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-            else encoded_data.attributes
+            else encoded_data.metadata.attributes
 
         n_candidates = 0
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
@@ -419,8 +427,6 @@ class Matcher(PPRLFeature):
         id2_arr = cp.asarray(self.encoded_data.ground_truth.iloc[:, 1].values) \
             + self.encoded_data.bounds[0]
 
-        if self.matcher_config.unique_ids:
-            id1_arr, id2_arr = self._evaluate_unique_ids(id1_arr, id2_arr)
 
         def pack_edges_direct(u,v):
             return u.astype(np.uint64) << 32 | v.astype(np.uint64)
