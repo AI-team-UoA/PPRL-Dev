@@ -14,12 +14,12 @@ from pprl.blocking import FAISSBlocking
 if __name__ == '__main__':
 
 
-    DIR = "D4"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'acmclean'
-    attributes = ['title']
-    SEP = "%"
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
+    attributes = ['title','starring']
+    SEP = "|"
 
     RESULTS = f"results/faiss/{DIR}"
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
@@ -34,7 +34,7 @@ if __name__ == '__main__':
             f"{RESULTS}/clustering/{faiss_mode}"
         ).mkdir(parents=True, exist_ok=True)
 
-    size = 1024
+    size = 1024 // 2
     qgrams = 4
     TOTAL_LENGTH = 32
     kiraly = KiralyMSMApproximateClustering()

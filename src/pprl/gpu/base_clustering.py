@@ -724,7 +724,9 @@ class AbstractClustering(PPRLFeature):
         self.execution_time: float = 0.0
 
     def _get_valid_edges_and_weights(self, graph : tuple) -> list:
-        edges, weights = graph
+        edges_cpu, weights_cpu = graph
+        edges = cp.asarray(edges_cpu)
+        weights = cp.asarray(weights_cpu)
         mask = weights > self.similarity_threshold
         valid_edges = edges[mask]
         valid_weights = weights[mask]
