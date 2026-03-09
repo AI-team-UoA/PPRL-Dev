@@ -56,6 +56,14 @@ class Matcher(PPRLFeature):
         # self.key_pair : KeyPair
 
 
+    def update_graph(self, graph: tuple, threshold: float) -> tuple:
+        """Updates graph based on a new threshold"""
+        self.matcher_config.threshold = threshold
+        edges, weights = graph
+        mask = self.matcher_config.threshold < weights
+        edges = edges[mask]
+        weights = weights[mask]
+        return edges, weights
 
     def _candidates(self,
             extract_candidates: Union[Dict[str, Block], EncodedData]) -> Tuple[set, OrderedSet]:
@@ -220,7 +228,7 @@ class Matcher(PPRLFeature):
         # matching_function = getattr(src.pprl.openfhe_similarity, matching_function)
 
         # attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-        #     else encoded_data.attributes
+        #     else encoded_data.metadata.attributes
 
         # graph : Graph = Graph()
 
@@ -276,7 +284,7 @@ class Matcher(PPRLFeature):
                             encoded_data: BloomEncodedData) -> np.array:
 
         n_attrs = len(attributes)
-        length = encoded_data.length
+        length = encoded_data.metadata.length
 
         if self.matcher_config.unique_ids is None:
             bloom_filter_matrix = np.zeros((self.encoded_data.bounds[1],
@@ -294,7 +302,7 @@ class Matcher(PPRLFeature):
             return bloom_filter_matrix
 
         n_ids = len(self.matcher_config.unique_ids)
-        length = encoded_data.length
+        length = encoded_data.metadata.length
 
         bloom_filter_matrix = np.zeros((n_ids, n_attrs, length), dtype=bool)
 
@@ -364,7 +372,7 @@ class Matcher(PPRLFeature):
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
 
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-            else encoded_data.attributes
+            else encoded_data.metadata.attributes
 
         n_candidates = 0
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
@@ -401,12 +409,12 @@ class Matcher(PPRLFeature):
 
         id2_arr = (self.encoded_data.ground_truth.iloc[:, 1].values + offset)
 
-        if self.matcher_config.unique_ids:
-            id_to_idx = {eid: idx \
-                for idx, eid in enumerate(self.matcher_config.unique_ids)}
-            replace_func = np.vectorize(lambda x: id_to_idx.get(x, x))
-            id1_arr = replace_func(id1_arr)
-            id2_arr = replace_func(id2_arr)
+        # if self.matcher_config.unique_ids:
+        #     id_to_idx = {eid: idx \
+        #         for idx, eid in enumerate(self.matcher_config.unique_ids)}
+        #     replace_func = np.vectorize(lambda x: id_to_idx.get(x, x))
+        #     id1_arr = replace_func(id1_arr)
+        #     id2_arr = replace_func(id2_arr)
 
         gt_pairs = np.column_stack((id1_arr, id2_arr)).astype(np.int32)
 

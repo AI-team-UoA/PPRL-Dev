@@ -1,7 +1,7 @@
 """Evaluation module
 This file contains all the methods for evaluating every module in pyjedai.
 """
-import numpy as np
+import cupy as cp
 from typing import List, Tuple, Dict
 from warnings import warn
 import random

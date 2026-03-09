@@ -163,7 +163,7 @@ class UniqueMappingClustering(AbstractClustering):
         del keys_stack, sort_indices, valid_edges, valid_weights
         cp.get_default_memory_pool().free_all_blocks()
 
-        candidates = candidates[:valid_edges.shape[0]*2].get()
+        candidates = candidates[:candidates.shape[0]*2].get()
 
         unique_edges = self._get_unique_edges(candidates)
         clusters = ConnectedComponentsClustering.scipi_connected_components(
@@ -293,9 +293,9 @@ class _KiralyVectors:
     is_uncertain: np.array
     fiances: np.array
 
-    def __init__(self, men_len: int,
+    def __init__(self, candidates_len: int, men_len: int,
         women_len: int) -> None:
-        self.men_active = np.full(men_len, True, bool)
+        self.men_active = np.full(candidates_len, True, bool)
         self.edge_score = np.full((men_len, women_len), -np.inf)
         self.edge_index = np.full((men_len, women_len), -1, dtype=int)
         self.is_bachelor = cp.asarray(np.full(men_len, False, bool))
@@ -491,8 +491,8 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         for i, m in enumerate(key_men_candidates):
             men_to_indices[m].append(i)
 
-        kv = _KiralyVectors(self.encoded_data.bounds[0],
-                        self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
+        kv = _KiralyVectors(sorted_edges.shape[0], self.encoded_data.bounds[0],
+                            self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
 
         free_men = deque(men.tolist())
         current_matches = self._get_current_matches(free_men, kv,

@@ -79,6 +79,7 @@ if __name__ == '__main__':
             graph = None
             for similarity in tqdm(range(5,100,5), desc="Matching Similarity", total=10):
                 thr = similarity / 100
+                thr = 0.7
                 if graph is None:
                     matcher = Matcher(batch_size=1_000_000, threshold=thr, metric=metric)
                     graph = matcher.predict(new_bloom)
@@ -128,19 +129,19 @@ if __name__ == '__main__':
 
 
 
-                for cl in [KiralyMSMApproximateClustering, ConnectedComponentsClustering,
-                        UniqueMappingClustering
-                        ]:
-                    clustering_method = cl()
-                    clusters = clustering_method.process(graph, new_bloom, thr)
-                    ev_cl = clustering_method.evaluate(clusters, verbose=True)
-                    cluster_ev = {
-                        'name': f'Clustering with {cl.__name__}',
-                        'total_clusters': len(clusters),
-                        'threshold': thr,
-                        'matcher': metric,
-                    }
-                exit(10)
+            for cl in [KiralyMSMApproximateClustering, ConnectedComponentsClustering,
+                    UniqueMappingClustering
+                    ]:
+                clustering_method = cl()
+                clusters = clustering_method.process(graph, new_bloom, thr)
+                ev_cl = clustering_method.evaluate(clusters, verbose=True)
+                cluster_ev = {
+                    'name': f'Clustering with {cl.__name__}',
+                    'total_clusters': len(clusters),
+                    'threshold': thr,
+                    'matcher': metric,
+                }
+            exit(10)
 
                 #     for keys, items in ev_cl.items():
                 #         cluster_ev[keys] = round(items, 2) \
