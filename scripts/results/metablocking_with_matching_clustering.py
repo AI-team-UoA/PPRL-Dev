@@ -27,11 +27,11 @@ from utils import (
 if __name__ == '__main__':
 
 
-    DIR = "D8"
+    DIR = "D2"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
-    attributes = ['title']
+    FILE = 'abtclean'
+    FILE2 = 'buyclean'
+    attributes = ['name']
     SEP = "|"
 
     RESULTS = f"results/metablocking/{DIR}"

@@ -28,8 +28,8 @@ class MatcherConfig:
     threshold : float
     metric : str
     attributes : List[str]
-    candidates : Set
-    unique_ids : OrderedSet
+    candidates : np.array
+    unique_ids : np.array
 
 class Matcher(PPRLFeature):
     """Matcher class for pprl"""
@@ -66,38 +66,25 @@ class Matcher(PPRLFeature):
         return edges, weights
 
     def _candidates(self,
-            extract_candidates: Union[Dict[str, Block], EncodedData]) -> Tuple[set, OrderedSet]:
-        candidates = set()
-        unique_ids = OrderedSet()
+            extract_candidates: Union[Dict[str, Block], EncodedData]) -> None:
 
-        if isinstance(extract_candidates, dict):
-            _, first_value = next(iter(extract_candidates.items()))
-            if isinstance(first_value, Block):
-                for _, block in extract_candidates.items():
-                    for d1, d2 in combinations(block.entities.values(), 2):
-                        for eid1, eid2 in product(d1, d2):
-                            candidates.add((eid1,eid2))
-                            unique_ids.add(eid1)
-                            unique_ids.add(eid2)
-            else:
-                for eid1, eid2s in extract_candidates.items():
-                    for eid2 in eid2s:
-                        candidates.add((eid1,eid2))
-                        unique_ids.add(eid1)
-                        unique_ids.add(eid2)
-        else:
-            start = 0
-            for i, bound in enumerate(extract_candidates.bounds):
-                d1 = range(start, bound)
-                for j in range(i+1, len(extract_candidates.bounds)):
-                    d2 = range(extract_candidates.bounds[j-1], extract_candidates.bounds[j])
+
+        _, first_value = next(iter(extract_candidates.items()))
+        if isinstance(first_value, Block):
+            candidates = set()
+            for _, block in extract_candidates.items():
+                for d1, d2 in combinations(block.entities.values(), 2):
                     for eid1, eid2 in product(d1, d2):
                         candidates.add((eid1,eid2))
-                        unique_ids.add(eid1)
-                        unique_ids.add(eid2)
-                start = bound
+            self.matcher_config.candidates = np.array(list(candidates))
+        else:
+            entity_ids_1 = list(extract_candidates.keys())
+            entity_ids_2 = [list(v) for v in extract_candidates.values()]
+            entity_ids_1_array = np.repeat(entity_ids_1, [len(v) for v in entity_ids_2])
+            entity_ids_2_array = np.concatenate(entity_ids_2)
+            self.matcher_config.candidates = np.column_stack([entity_ids_1_array, entity_ids_2_array])
 
-        return candidates, unique_ids
+        self.matcher_config.unique_ids = np.unique(self.matcher_config.candidates)
 
     @overload
     def predict(self,
@@ -164,10 +151,7 @@ class Matcher(PPRLFeature):
             self.ground_truth = encoded_data.ground_truth
 
         if blocks:
-            self.matcher_config.candidates, self.matcher_config.unique_ids = \
             self._candidates(blocks)
-        else:
-            self.matcher_config.candidates = self.matcher_config.unique_ids = None
 
 
         if isinstance(encoded_data, BloomEncodedData):
@@ -317,13 +301,16 @@ class Matcher(PPRLFeature):
         return bloom_filter_matrix
 
     def _get_unique_ids(self) -> tuple:
-        id_to_idx = {eid: idx \
-                for idx, eid in enumerate(self.matcher_config.unique_ids)}
-        unique_ids_arr = np.array(self.matcher_config.unique_ids)
 
-        idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
-                        for eid1, eid2 in self.matcher_config.candidates])
-        n_candidates = len(idx_pairs)
+        sorter = np.argsort(self.matcher_config.unique_ids)
+
+        idx_pairs = sorter[
+            np.searchsorted(self.matcher_config.unique_ids,
+                    self.matcher_config.candidates, sorter=sorter)
+            ]
+        unique_ids_arr = self.matcher_config.unique_ids
+        n_candidates = idx_pairs.shape[0]
+
         return n_candidates, unique_ids_arr, idx_pairs
 
     def _get_unique_ids_dense(self) -> tuple:
@@ -378,7 +365,7 @@ class Matcher(PPRLFeature):
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
 
-        if self.matcher_config.unique_ids:
+        if self.matcher_config.unique_ids is not None:
             n_candidates, unique_ids_arr, idx_pairs = self._get_unique_ids()
             return self._match_all(n_candidates, bloom_matrix, unique_ids_arr, idx_pairs)
 
