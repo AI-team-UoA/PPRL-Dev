@@ -277,7 +277,7 @@ class Matcher(PPRLFeature):
                             encoded_data: BloomEncodedData) -> np.array:
 
         n_attrs = len(attributes)
-        length = encoded_data.length
+        length = encoded_data.metadata.length
 
         if self.matcher_config.unique_ids is None:
             bloom_filter_matrix = np.zeros((self.encoded_data.bounds[1],
@@ -295,7 +295,7 @@ class Matcher(PPRLFeature):
             return bloom_filter_matrix
 
         n_ids = len(self.matcher_config.unique_ids)
-        length = encoded_data.length
+        length = encoded_data.metadata.length
 
         bloom_filter_matrix = np.zeros((n_ids, n_attrs, length), dtype=bool)
 
@@ -368,7 +368,7 @@ class Matcher(PPRLFeature):
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
 
         attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-            else encoded_data.attributes
+            else encoded_data.metadata.attributes
 
         n_candidates = 0
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
