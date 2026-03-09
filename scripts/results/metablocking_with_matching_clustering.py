@@ -4,12 +4,12 @@ import os
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
-from pprl.clustering import (
+from pprl.gpu.clustering import (
     ConnectedComponentsClustering,
     KiralyMSMApproximateClustering,
     UniqueMappingClustering
 )
-from pprl.matching import Matcher
+from pprl.gpu.matching import Matcher
 
 from pprl.comparison_cleaning import (
     WeightedEdgePruning,
@@ -36,8 +36,8 @@ if __name__ == '__main__':
 
     RESULTS = f"results/metablocking/{DIR}"
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
-    BLOOM_NAME = 'faiss'
-    print(f"Running FAISS for {DIR}")
+    BLOOM_NAME = 'metablocking'
+    print(f"Running Metablocking for {DIR}")
 
     wep = WeightedEdgePruning()
     wnp = WeightedNodePruning()
@@ -56,7 +56,7 @@ if __name__ == '__main__':
 
     size = 1024
     qgrams = 4
-    TOTAL_LENGTH = 32
+    TOTAL_LENGTH = 32 - 24
 
 
     kiraly = KiralyMSMApproximateClustering()
@@ -64,7 +64,7 @@ if __name__ == '__main__':
     unique = UniqueMappingClustering()
 
 
-    for num_hashes in tqdm(range(1, 33), total=TOTAL_LENGTH,
+    for num_hashes in tqdm(range(25, 33), total=TOTAL_LENGTH,
                 position=0, desc="Total Progress", leave=True):
         configuration = {'attributes': attributes,
             'size': size,
