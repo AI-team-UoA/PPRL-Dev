@@ -78,8 +78,8 @@ class ConnectedComponentsClustering(AbstractClustering):
             return []
 
         flat_nodes = edges.ravel()
-        max_id = int(flat_nodes.max())
-        degrees = cp.bincount(flat_nodes, minlength=max_id + 1)
+        max_id = int(flat_nodes.max()) + 1
+        degrees = cp.bincount(flat_nodes, minlength=max_id)
         deg_u = degrees[edges[:, 0]]
         deg_v = degrees[edges[:, 1]]
         mask = (deg_u == 1) & (deg_v == 1)

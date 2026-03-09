@@ -101,37 +101,28 @@ class BloomEncodedData(EncodedData, PPRLFeature):
             return  1
         return 0
 
-    def _get_key_set(self, idx: int,
+    def _get_key_set(self, entity_id: int,
                 blooms: Dict[str, List[int]],
-                adjacent_bits: int,
-                inverted_index: Dict[str, Dict[int, set]]) -> list:
+                adjacent_bits: int) -> list:
 
-        dataset = self._get_dataset(idx)
-        length_encoded_dict = self.metadata.length * \
-            len(self.metadata.attributes)
-        concatenated_bloom = []
-        for i,attr in enumerate(
-                self.metadata.attributes):
-            concatenated_bloom += [bl_i + i * self.metadata.length for bl_i in blooms[attr]]
+        chunks = defaultdict(list)
+        for i, attr in enumerate(self.metadata.attributes):
+            offset = i * self.metadata.length
+            for bl_i in blooms[attr]:
+                bit_val = bl_i + offset
+                chunk_index = bit_val // adjacent_bits
+                chunks[chunk_index].append(bit_val)
 
-        key_set = set()
-        adjacent_list = list(range(adjacent_bits))
-        for index in range((length_encoded_dict + adjacent_bits - 1) //  adjacent_bits):
-            adj_list = [(i + index * adjacent_bits) for i in adjacent_list]
-            bit_key = f'{index}'
-            for i in adj_list:
-                if i in concatenated_bloom:
-                    bit_key = f'{bit_key},{i}'
-            if bit_key != f'{index}':
-                key_set.add(bit_key)
-            if bit_key not in inverted_index:
-                inverted_index[bit_key] = {key: set() for key in range(len(self.bounds))}
-            inverted_index[bit_key][dataset].add(idx)
+        block_keys = []
+        for index, bits in chunks.items():
+            bits.sort()
+            bit_key = f'{index},' + ",".join(map(str, bits))
+            block_keys.append(bit_key)
 
+        entity_ids = [entity_id] * len(block_keys)
+        return entity_ids, block_keys
 
-        return inverted_index, [*key_set]
-
-    def to_entities(self,
+    def get_entity_id_block_key_pairs(self,
             adjacent_bits: int = 1) -> Tuple[dict, dict]:
         """
         Convert to entity-bit mapping and create inverted index.
@@ -145,16 +136,15 @@ class BloomEncodedData(EncodedData, PPRLFeature):
         Returns:
             Tuple of (entity_to_bits, inverted_index)
         """
-        to_entities : dict = {}
-        inverted_index : Dict[int, Dict[int, set]]= {}
 
-
+        entity_ids = []
+        block_keys = []
         for idx, blooms in self.encoded_dict.items():
-            inverted_index, key_set = self._get_key_set(idx,
-                            blooms, adjacent_bits, inverted_index)
-            to_entities[idx] = key_set
+            ent_id, blk_keys = self._get_key_set(idx, blooms, adjacent_bits)
+            entity_ids.extend(ent_id)
+            block_keys.extend(blk_keys)
 
-        return to_entities, dict(inverted_index)
+        return np.array(entity_ids), np.array(block_keys)
 
 
     @classmethod
