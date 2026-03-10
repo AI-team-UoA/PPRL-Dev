@@ -12,12 +12,11 @@ from pprl.clustering import (
 from pprl.matching import Matcher
 
 from pprl.comparison_cleaning import (
-    WeightedEdgePruning,
-    WeightedNodePruning,
     CardinalityEdgePruning,
     CardinalityNodePruning,
+    WeightedNodePruning, 
+    WeightedEdgePruning
 )
-
 from utils import (
     config_bloom_filter_with_configuration,
     load_dataframe,
@@ -40,7 +39,6 @@ if __name__ == '__main__':
 
     wep = CardinalityNodePruning()
 
-
     size = 1024
     qgrams = 4
 
@@ -60,6 +58,7 @@ if __name__ == '__main__':
 
     blocks = wep.process(encoded_data = new_bloom,
                 adjacent_bits = 12)
+    # print("Threshold:", wep._threshold)
     ev = wep.evaluate(blocks, verbose=True)
 
 

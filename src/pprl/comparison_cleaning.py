@@ -49,8 +49,6 @@ class AbstractComparisonCleaning(PPRLFeature):
         self.candidate_pairs : Dict[int, set] = defaultdict(set)
 
         self.entity_ids, self.block_keys, = encoded_data.get_entity_id_block_key_pairs(adjacent_bits)
-        self._entity_index = defaultdict(list)
-        self._inverted_index = defaultdict(lambda: {0: set(), 1: set()})
 
         entity_indices = self.entity_ids
 
@@ -60,8 +58,10 @@ class AbstractComparisonCleaning(PPRLFeature):
 
         _, block_indices = np.unique(self.block_keys,
                             return_inverse=True)
+
         num_blocks = block_indices.max() + 1 \
             if len(block_indices) > 0 else 0
+
 
         data = np.ones(entity_indices.shape[0], dtype=bool)
         M = csr_matrix(
@@ -72,16 +72,6 @@ class AbstractComparisonCleaning(PPRLFeature):
 
         self.M1 = M[:limit, :]
         self.M2 = M[limit:, :]
-
-        for entity_id, block_key in zip(self.entity_ids, self.block_keys):
-            self._entity_index[int(entity_id)].append(block_key)
-
-            dataset  = 0  if int(entity_id) < self.encoded_data.bounds[0] \
-                else 1
-
-            self._inverted_index[block_key][dataset].add(entity_id)
-
-
 
         self.candidate_pairs = self._apply_main_processing()
 
@@ -140,6 +130,8 @@ class AbstractComparisonCleaning(PPRLFeature):
         for block in prediction.values():
             total_matching_pairs += len(block)
 
+
+
         for _, (id1, id2) in self.encoded_data.ground_truth.iterrows():
             id2 = self.encoded_data.bounds[0] + id2
             if id1 in prediction and id2 in prediction[id1]:
@@ -190,8 +182,8 @@ class AbstractMetablocking(AbstractComparisonCleaning, ABC):
         self.weighting_scheme: str
 
     def _apply_main_processing(self) -> dict:
-        self._counters = np.empty([len(self._entity_index)], dtype=float)
-        self._flags = np.empty([len(self._entity_index)], dtype=int)
+        self._counters = np.empty([self.encoded_data.bounds[1]], dtype=float)
+        self._flags = np.empty([self.encoded_data.bounds[1]], dtype=int)
         self._set_statistics()
         self._set_threshold()
 
@@ -394,30 +386,6 @@ class WeightedEdgePruning(AbstractMetablocking):
 
     def _process_entity(self, entity_id: int) -> None:
         pass
-    #     if entity_id not in self._entity_index:
-    #         return
-
-    #     my_blocks = self.M1[entity_id, :]
-    #     target_M = self.M2
-    #     offset = self.encoded_data.bounds[0]
-
-    #     c_blocks = my_blocks.multiply(self._block_cardinalites)
-    #     scores = c_blocks.dot(target_M.T)
-    #     neighbor_indices = scores.indices + offset
-    #     counter_value = scores.data
-    #     self._valid_entities.clear()
-    #     self._valid_entities.update(neighbor_indices)
-
-    #     self._counters[:] = 0
-    #     self._counters[neighbor_indices] = counter_value
-
-    # def _update_threshold(self, entity_id: int) -> None:
-    #     if entity_id not in self._entity_index:
-    #         return
-
-    #     self._num_of_edges += len(self._valid_entities)
-    #     for neighbor_id in self._valid_entities:
-    #         self._threshold += self._get_weight(entity_id, neighbor_id)
 
 
     def _update_counters(self) -> None:
@@ -451,20 +419,6 @@ class WeightedEdgePruning(AbstractMetablocking):
 
         self._threshold = C.data.sum() / self._num_of_edges
         self._sim_csr = C.tocsr()
-
-
-    # def _verify_valid_entities(self, entity_id: int) -> None:
-    #     if entity_id not in self._entity_index:
-    #         return
-
-    #     self._retained_neighbors.clear()
-    #     for neighbor_id in self._valid_entities:
-    #         weight = self._get_weight(entity_id, neighbor_id)
-    #         if self._threshold <= weight:
-    #             self._retained_neighbors.add(neighbor_id)
-
-    #     if len(self._retained_neighbors) > 0:
-    #         self.candidate_pairs[entity_id].update(self._retained_neighbors.copy())
 
 
     def _configuration(self) -> dict:
@@ -502,17 +456,18 @@ class CardinalityEdgePruning(WeightedEdgePruning):
         C.data = self._get_vectorized_weights(C)
         self._sim_csr = C.tocsr()
 
-
         K = int(self._threshold)
+        print("K: ", K)
         C = self._sim_csr.tocoo()
 
         data = C.data
         rows = C.row
-        cols = C.col + (_limit if not self._node_centric else 0)
+        cols = C.col + _limit
+
         num_edges = len(data)
 
         if num_edges > K > 0:
-            top_k_indices = np.argpartition(data, K)[K:]
+            top_k_indices = np.argpartition(data, -K)[-K:]
             top_rows = rows[top_k_indices]
             top_cols = cols[top_k_indices]
         else:
@@ -526,6 +481,7 @@ class CardinalityEdgePruning(WeightedEdgePruning):
 
     def _set_threshold(self) -> None:
         self._threshold = self.block_keys.shape[0] / 2
+
 
     def _verify_valid_entities(self, entity_id: int) -> None:
         if entity_id not in self._entity_index:
@@ -557,104 +513,89 @@ class CardinalityNodePruning(CardinalityEdgePruning):
         self._top_k_edges: PriorityQueue
 
     def _prune_edges(self) -> dict:
-        # _limit = self.encoded_data.bounds[0] if not self._node_centric \
-        #     else len(self.encoded_data.encoded_dict)
+        _limit = self.encoded_data.bounds[0] if not self._node_centric \
+            else len(self.encoded_data.encoded_dict)
 
-        # self._update_counters()
-        # processed_M1 = self.M1.multiply(self._block_cardinalites)
-        # _sim_matrix = processed_M1.dot(self.M2.T)
-        # self._num_of_edges = _sim_matrix.nnz
+        self._update_counters()
+        processed_M1 = self.M1.multiply(self._block_cardinalites)
+        _sim_matrix = processed_M1.dot(self.M2.T)
+        self._num_of_edges = _sim_matrix.nnz
 
-        # C = _sim_matrix.tocoo()
-        # C.data = self._get_vectorized_weights(C)
-        # self._sim_csr = C.tocsr()
-
-
-        # K = int(self._threshold)
-        # indptr = self._sim_csr.indptr
-        # indices = self._sim_csr.indices
-        # data = self._sim_csr.data
-        # offset = self.encoded_data.bounds[0]
+        C = _sim_matrix.tocoo()
+        C.data = self._get_vectorized_weights(C)
+        self._sim_csr = C.tocsr()
 
 
-
-        # sources = []
-        # targets = []
-        # for i in range(0, self.encoded_data.bounds[0]):
-        #     start_idx = indptr[i]
-        #     end_idx = indptr[i + 1]
-        #     row_len = end_idx - start_idx
-
-        #     if row_len == 0:
-        #         continue
-        #     row_data = data[start_idx:end_idx]
-        #     row_indices = indices[start_idx:end_idx]
-
-        #     if row_len > K:
-        #         top_k_pos = np.argpartition(row_data, K)[K:]
-        #         top_neighbors = row_indices[top_k_pos]
-        #     else:
-        #         top_neighbors = row_indices
-        #     sources.append(np.full(len(top_neighbors), i, dtype=int))
-        #     targets.append(top_neighbors + offset)
-
-        # if self._node_centric:
-        #     sim_csc = self._sim_csr.tocsc()
-        #     indptr_col = sim_csc.indptr
-        #     indices_col = sim_csc.indices
-        #     data_col = sim_csc.data
-
-        #     num_d2_entities = sim_csc.shape[1]
-        #     for j in range(num_d2_entities):
-        #         start = indptr_col[j]
-        #         end = indptr_col[j + 1]
-
-        #         if end > start:
-        #             col_data = data_col[start:end]
-        #             col_indices = indices_col[start:end] # These are D1 IDs
-
-        #             if (end - start) > K:
-        #                 top_k_pos = np.argpartition(col_data, K)[K:]
-        #                 top_neighbors = col_indices[top_k_pos]
-        #             else:
-        #                 top_neighbors = col_indices
-
-        #             # The entity is 'j + limit_d1', voting for 'col_indices'
-        #             sources.append(np.full(len(top_neighbors), j + offset, dtype=np.int32))
-        #             targets.append(top_neighbors)
+        K = int(self._threshold)
+        indptr = self._sim_csr.indptr
+        indices = self._sim_csr.indices
+        data = self._sim_csr.data
+        offset = self.encoded_data.bounds[0]
 
 
-        # self.candidate_pairs = defaultdict(set)
+
+        sources = []
+        targets = []
+        for i in range(0, self.encoded_data.bounds[0]):
+            start_idx = indptr[i]
+            end_idx = indptr[i + 1]
+            row_len = end_idx - start_idx
+
+            if row_len == 0:
+                continue
 
 
-        # if not sources:
-        #     return self.candidate_pairs
+            row_data = data[start_idx:end_idx]
+            row_indices = indices[start_idx:end_idx]
 
-        # sources = np.concatenate(sources)
-        # targets = np.concatenate(targets)
-        # edges = np.column_stack((sources, targets))
+            if row_len > K:
+                top_k_pos = np.argpartition(row_data, -K)[-K:]
+                top_neighbors = row_indices[top_k_pos]
+            else:
+                top_neighbors = row_indices
+            sources.append(np.full(len(top_neighbors), i, dtype=int))
+            targets.append(top_neighbors + offset)
 
-        # self._nearest_entities = {}
-        # for src, tgt in edges:
-        #     self._nearest_entities.setdefault(src, set()).add(tgt)
+        if self._node_centric:
+            sim_csc = self._sim_csr.tocsc()
+            indptr_col = sim_csc.indptr
+            indices_col = sim_csc.indices
+            data_col = sim_csc.data
 
-        # for src, neighbors in self._nearest_entities.items():
-        #     for neighbor in neighbors:
-        #         if self._is_valid_comparison(src, neighbor):
-        #             self.candidate_pairs[src].add(neighbor)
-        # if self._node_centric:
-        #     edges.sort(axis=1)
-        # unique_edges = np.unique(edges, axis=0)
-        # for src, tgt in unique_edges:
-        #     self.candidate_pairs[src].add(tgt)
+            num_d2_entities = self.encoded_data.bounds[1] - self.encoded_data.bounds[0]
+            for j in range(num_d2_entities):
+                start = indptr_col[j]
+                end = indptr_col[j + 1]
+
+                if end > start:
+                    col_data = data_col[start:end]
+                    col_indices = indices_col[start:end] # These are D1 IDs
+
+                    if (end - start) > K:
+                        top_k_pos = np.argpartition(col_data, -K)[-K:]
+                        top_neighbors = col_indices[top_k_pos]
+                    else:
+                        top_neighbors = col_indices
+
+                    # The entity is 'j + limit_d1', voting for 'col_indices'
+                    sources.append(np.full(len(top_neighbors), j + offset, dtype=np.int32))
+                    targets.append(top_neighbors)
+
+
+        self.candidate_pairs = defaultdict(set)
+        sources = np.concatenate(sources)
+        targets = np.concatenate(targets)
+        edges = np.column_stack((sources, targets))
+        self._nearest_entities = {}
+
+        for src, tgt in edges:
+            self._nearest_entities.setdefault(src, set()).add(tgt)
+
+        for src, tgt in edges:
+            if self._is_valid_comparison(src, tgt):
+                self.candidate_pairs[src].add(tgt)
 
         return self.candidate_pairs
-
-        # self._nearest_entities = {}
-        # for i in range(0, _limit):
-        #     self._process_entity(i)
-        #     self._verify_valid_entities(i)
-        # return self._retain_valid_comparisons()
 
     def _retain_valid_comparisons(self) -> dict:
         self.candidate_pairs = defaultdict(set)
@@ -744,14 +685,43 @@ class WeightedNodePruning(WeightedEdgePruning):
                              self._average_weight[neighbor_id] <= weight) and
                                 entity_id < neighbor_id) else 0
 
+
+    def _prune_edges(self) -> dict:
+
+        C = self._sim_matrix.tocoo()
+        weights = self._get_vectorized_weights(C)
+
+        mask = ((self._average_weight[C.row] <= weights) | \
+                (self._average_weight[C.col] <= weights))
+
+        valid_rows = C.row[mask]
+        valid_cols = C.col[mask] + self.encoded_data.bounds[0]
+
+        for entity_id, neighbor_id in zip(valid_rows, valid_cols):
+            self.candidate_pairs[entity_id].add(neighbor_id)
+        return self.candidate_pairs
+
+
     def _set_threshold(self):
         _limit = self.encoded_data.bounds[0] if not self._node_centric \
             else len(self.encoded_data.encoded_dict)
 
         self._average_weight = np.zeros(_limit, dtype=float)
+
+        self._update_counters()
+
+        processed_M1 = self.M1.multiply(self._block_cardinalites)
+        self._sim_matrix = processed_M1.dot(self.M2.T)
+        self._num_of_edges = self._sim_matrix.nnz
+
+        C = self._sim_matrix.tocoo()
+        C.data = self._get_vectorized_weights(C)
+        data = C.data
+        row = C.row
         for i in range(0, _limit):
-            self._process_entity(i)
-            self._update_threshold(i)
+            self._average_weight[i] = data[row == i].mean() \
+                if np.any(row == i) else 0.0
+
 
     def _update_threshold(self, entity_id: int) -> None:
         if entity_id not in self._entity_index:
