@@ -91,8 +91,7 @@ class BloomFilter:
             for attribute in self.attributes:
                 bloom_dict[attribute] = self.hash(getattr(row,attribute))
         else:
-            row_values : list = [value for value in row]
-            flatten_row = " ".join(str(x) for x in row_values)
+            flatten_row = " ".join(str(x) for x in row)
             bloom_dict['row'] = self.hash(flatten_row)
         return bloom_dict
 

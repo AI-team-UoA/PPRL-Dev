@@ -153,7 +153,7 @@ class AbstractBlockBuilding(AbstractBlockProcessing):
         """
         _start_time = time.time()
         self.encoded_data : BloomEncodedData = encoded_data
-        bloom_attributes = encoded_data.attributes
+        bloom_attributes = encoded_data.metadata.attributes
 
         if attributes:
             if set(attributes) > set(bloom_attributes):
@@ -354,10 +354,10 @@ class BitBlocker(AbstractBlockBuilding):
         self.hash_indices : tuple
 
     def _fit(self) -> None:
-        if self.encoded_data.length % 4 != 0 :
+        if self.encoded_data.metadata.length % 4 != 0 :
             raise ValueError("Bloom Filters' length must multiple of 4.")
 
-        self.hash_len = self.encoded_data.length * len(self.attributes)
+        self.hash_len = self.encoded_data.metadata.length * len(self.attributes)
         self.rng = random.Random(self.seed)
         self.hash_indices = tuple(self.rng.sample(range(self.hash_len), self.psi)
                                   for _ in range(self.lmbda))

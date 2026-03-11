@@ -10,8 +10,8 @@ rmm.reinitialize(pool_allocator=False)
 from pathlib import Path
 import pickle
 
-from pprl.matching_gpu import Matcher
-from pprl.clustering_gpu import UniqueMappingClustering, \
+from pprl.gpu.matching import Matcher
+from pprl.gpu.clustering import UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 
@@ -33,12 +33,12 @@ if __name__ == '__main__':
     # SEP = ">"
 
 
-    # DIR = "D9"
-    # PATH = f"data/ccer/{DIR}"
-    # FILE = 'dblpclean'
-    # FILE2 = 'scholarclean'
-    # attributes = [['title']]
-    # SEP = ">"
+    DIR = "D2"
+    PATH = f"data/ccer/{DIR}"
+    FILE = 'abtclean'
+    FILE2 = 'buyclean'
+    attributes = [['name']]
+    SEP = "|"
 
     RESULTS = f"results/matching/{DIR}"
     RESULTS_CLUSTERING = f"results/clustering/{DIR}"
@@ -48,89 +48,15 @@ if __name__ == '__main__':
     print(f"Running MATCHING & CLUSTERING for {DIR}")
 
 
-    size = [1024 // 2]
+    size = [1024]
     qgrams = [4]
     TOTAL_LENGTH = 32
     # futures = []
     # MAX_CONCURRENCY = 24
     # CLUSTER_MAX_CONCURRENCY = 5
-
-
-    adjacent_config = {}
-
     matched_done = set()
-    clustered_done = set()
     skip = set()
-    # for metric in ['dice', 'jaccard', 'cosine']:
-    #     matching_df = pd.read_csv(f"{RESULTS}/{metric}.csv")
-    #     matching_df['config'] = matching_df['config'].apply(ast.literal_eval)
-    #     matching_df['metric'] = metric
-    #     matching_df['num_hashes'] = matching_df['config'].apply(lambda x: x['num_hashes'])
-    #     list_done = set(zip(
-    #         matching_df['metric'],
-    #         matching_df['num_hashes'],
-    #         matching_df['similarity_threshold']))
-    #     matched_done.update(list_done)
-    #     max_num_hashes = matching_df['num_hashes'].max()
-
-
-    #     def clustering_done_list(clustering_method: str):
-    #         filename = f"{clustering_method}_{metric}.csv"
-    #         if not os.path.exists(f"{RESULTS_CLUSTERING}/{filename}"):
-    #             return False
-    #         clustering_df = pd.read_csv(f"{RESULTS_CLUSTERING}/"
-    #             f"{clustering_method}_{metric}.csv")
-    #         clustering_df['config'] = clustering_df['config'].apply(
-    #             ast.literal_eval)
-    #         clustering_df['num_hashes'] = clustering_df['config'].apply(
-    #             lambda x: x['num_hashes'])
-    #         clustering_df['method'] = clustering_method
-    #         list_done_cl = set(zip(
-    #                 clustering_df['method'],
-    #                 clustering_df['matcher'],
-    #                 clustering_df['num_hashes'],
-    #                 clustering_df['matching_thr'],
-    #                 clustering_df['clustering_threshold']))
-    #         return list_done_cl
-
-
-    #     for hashing in range(1, max_num_hashes + 1):
-    #         flag = True
-    #         for similarity in range(5, 100, 5):
-    #             if flag == False:
-    #                 break
-    #             if (metric, hashing, similarity / 100) not in matched_done:
-    #                 flag = False
-    #                 break
-    #             for cl_method in [
-    #                 'ConnectedComponentsClustering',
-    #                 'UniqueMappingClustering',
-    #                 'KiralyMSMApproximateClustering']:
-
-    #                 cl_done = clustering_done_list(cl_method)
-    #                 clustered_done.update(cl_done if cl_done else set())
-    #                 if flag == False:
-    #                     continue
-    #                 if cl_done:
-    #                     for cl_similarity in range(10, 100, 10):
-    #                         if (cl_method, metric, hashing,
-    #                             similarity / 100,
-    #                             cl_similarity / 100) not in cl_done:
-    #                             flag = False
-    #                             break
-    #                 else:
-    #                     flag = False
-    #                     break
-    #         if flag:
-    #             skip.add((metric, hashing))
-
-
-
-    # if not ray.is_initialized():
-    #     logging.getLogger("ray").setLevel(logging.ERROR)
-    #     ray.init(log_to_driver=False, logging_level=logging.ERROR,
-    #             local_mode=False)
-
+    adjacent_config = {}
     for configuration, new_bloom in tqdm(
         config_bloom_filter(attributes, size, qgrams,
                 BLOOM_NAME, loaded_dataframe, adjacent_config),
@@ -153,6 +79,7 @@ if __name__ == '__main__':
             graph = None
             for similarity in tqdm(range(5,100,5), desc="Matching Similarity", total=10):
                 thr = similarity / 100
+                thr = 0.7
                 if graph is None:
                     matcher = Matcher(batch_size=1_000_000, threshold=thr, metric=metric)
                     graph = matcher.predict(new_bloom)
@@ -176,11 +103,12 @@ if __name__ == '__main__':
                     }
                     graph_index = similarity//5
 
-                    with open(f"{graph_path}/graph_{graph_index}.pkl", "wb+") as f:
-                        pickle.dump(dict_to_pickle, f)
+                    # with open(f"{graph_path}/graph_{graph_index}.pkl", "wb+") as f:
+                    #     pickle.dump(dict_to_pickle, f)
 
 
-                    ev = matcher.evaluate(graph, verbose=False)
+                    ev = matcher.evaluate(graph, verbose=True)
+                    break
                     matcher_ev = {
                         'name': f'Matching with {metric}',
                         'total_matches': edges.shape[0],
@@ -201,18 +129,19 @@ if __name__ == '__main__':
 
 
 
-                # for cl in [KiralyMSMApproximateClustering, ConnectedComponentsClustering,
-                #         UniqueMappingClustering
-                #         ]:
-                #     clustering_method = cl()
-                #     clusters = clustering_method.process(graph, new_bloom, thr)
-                #     ev_cl = clustering_method.evaluate(clusters, verbose=False)
-                #     cluster_ev = {
-                #         'name': f'Clustering with {cl.__name__}',
-                #         'total_clusters': len(clusters),
-                #         'threshold': thr,
-                #         'matcher': metric,
-                #     }
+            for cl in [KiralyMSMApproximateClustering, ConnectedComponentsClustering,
+                    UniqueMappingClustering
+                    ]:
+                clustering_method = cl()
+                clusters = clustering_method.process(graph, new_bloom, thr)
+                ev_cl = clustering_method.evaluate(clusters, verbose=True)
+                cluster_ev = {
+                    'name': f'Clustering with {cl.__name__}',
+                    'total_clusters': len(clusters),
+                    'threshold': thr,
+                    'matcher': metric,
+                }
+            exit(10)
 
                 #     for keys, items in ev_cl.items():
                 #         cluster_ev[keys] = round(items, 2) \

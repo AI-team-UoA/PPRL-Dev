@@ -723,6 +723,15 @@ class AbstractClustering(PPRLFeature):
         self.similarity_threshold: float = 0.1
         self.execution_time: float = 0.0
 
+    def _get_valid_edges_and_weights(self, graph : tuple) -> list:
+        edges, weights = graph
+        mask = weights > self.similarity_threshold
+        valid_edges = edges[mask]
+        valid_weights = weights[mask]
+
+        return valid_edges, valid_weights
+
+
     def evaluate(self,
             prediction: dict,
             export_to_df: bool = False,

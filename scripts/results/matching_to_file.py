@@ -58,76 +58,44 @@ if __name__ == '__main__':
 
         graph_path = f".graphs/bloom_{num_hashes}"
         for metric in ['cosine', 'dice', 'jaccard']:
+            if num_hashes == 8 and metric == 'cosine':
+                continue
+
             Path(
                 f".graphs/bloom_{configuration['num_hashes']}/{metric}"
                 ).mkdir(parents=True, exist_ok=True)
             graph = None
-            for similarity in tqdm(range(5, 100, 5), total=19):
-                graph_index = similarity // 5
-                graph_file_name = f'{graph_path}/{metric}/graph_{graph_index}.pkl'
-                thr = similarity / 100
-                if graph is None:
+            similarity = 5
+            graph_index = similarity // 5
+            graph_file_name = f'{graph_path}/{metric}/graph_{graph_index}.pkl'
+            thr = similarity / 100
+            if graph is None:
 
-                    matcher = Matcher(batch_size=1_000_000, threshold=thr, metric=metric)
-                    graph = matcher.predict(new_bloom)
-                    edges_gpu, weights_gpu = graph
-                    edges = cp.asnumpy(edges_gpu)
-                    weights = cp.asnumpy(weights_gpu)
+                matcher = Matcher(batch_size=1_000_000, threshold=thr, metric=metric)
+                graph = matcher.predict(new_bloom)
+                edges_gpu, weights_gpu = graph
+                edges = cp.asnumpy(edges_gpu)
+                weights = cp.asnumpy(weights_gpu)
 
-                    graph = edges, weights
+                graph = edges, weights
 
-                    del edges_gpu, weights_gpu
-                    cp.get_default_memory_pool().free_all_blocks()
+                del edges_gpu, weights_gpu
+                cp.get_default_memory_pool().free_all_blocks()
 
-                    dict_to_pickle = {
-                        'edges': edges,
-                        'weights': weights,
-                        'sim': thr,
-                        'metric': metric,
-                        'num_hashes': configuration['num_hashes']
-                    }
-                    graph_index = similarity//5
+                dict_to_pickle = {
+                    'edges': edges,
+                    'weights': weights,
+                    'sim': thr,
+                    'metric': metric,
+                    'num_hashes': configuration['num_hashes']
+                }
+                graph_index = similarity//5
 
-                    with open(f"{graph_file_name}", "wb+") as f:
-                        pickle.dump(dict_to_pickle, f)
-                    del dict_to_pickle
-                    gc.collect()
+                with open(f"{graph_file_name}", "wb+") as f:
+                    pickle.dump(dict_to_pickle, f)
+                del dict_to_pickle
+                gc.collect()
 
-                else:
-                    edges, weights = graph
-                    mask = thr <= weights
-                    del graph
-                    gc.collect()
-
-                    new_edges = edges[mask]
-                    new_weights = weights[mask]
-
-                    del edges, weights, mask
-                    gc.collect()
-                    edges = new_edges
-                    graph = edges, new_weights
-                    matcher.matcher_config.threshold = thr
-                ev = matcher.evaluate(graph, verbose=False)
-                matcher_ev = {
-                    'name': f'Matching with {metric}',
-                    'total_matches': edges.shape[0],
-                    'similarity_threshold': thr}
-                for keys, items in ev.items():
-                    matcher_ev[keys] = round(items, 2) if isinstance(items, float) else items
-
-
-
-
-                matcher_ev['config'] = configuration
-                filename = f"{metric}.csv"
-                loaded = os.path.exists(f"{RESULTS}/{filename}")
-                df = pd.DataFrame([matcher_ev])
-                df.to_csv(f'{RESULTS}/{filename}',
-                mode='a+', index=False, header=not loaded)
-            del graph
-            gc.collect()
-        del new_bloom
-        gc.collect()
 
     print(f"Finished {DIR}")
 
