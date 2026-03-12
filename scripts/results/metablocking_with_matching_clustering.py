@@ -3,6 +3,7 @@
 import os
 from pathlib import Path
 import pandas as pd
+import numpy as np
 from tqdm import tqdm
 from pprl.gpu.clustering import (
     ConnectedComponentsClustering,
@@ -27,12 +28,12 @@ from utils import (
 if __name__ == '__main__':
 
 
-    DIR = "D2"
+    DIR = "D9"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'abtclean'
-    FILE2 = 'buyclean'
-    attributes = ['name']
-    SEP = "|"
+    FILE = 'dblpclean'
+    FILE2 = 'scholarclean'
+    attributes = ['title']
+    SEP = ">"
 
     RESULTS = f"results/metablocking/{DIR}"
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
@@ -56,7 +57,7 @@ if __name__ == '__main__':
 
     size = 1024
     qgrams = 4
-    TOTAL_LENGTH = 32 - 24
+    TOTAL_LENGTH = 32
 
 
     kiraly = KiralyMSMApproximateClustering()
@@ -64,7 +65,7 @@ if __name__ == '__main__':
     unique = UniqueMappingClustering()
 
 
-    for num_hashes in tqdm(range(25, 33), total=TOTAL_LENGTH,
+    for num_hashes in tqdm(range(1, 33), total=TOTAL_LENGTH,
                 position=0, desc="Total Progress", leave=True):
         configuration = {'attributes': attributes,
             'size': size,
@@ -84,6 +85,28 @@ if __name__ == '__main__':
                     position=1, leave=False):
             blocks = cc.process(encoded_data = new_bloom,
                         adjacent_bits = 12)
+
+            ev : dict = cc.evaluate(blocks, verbose = False)
+
+            cnt = 0
+            for val in blocks.values():
+                cnt += len(val)
+
+            cc_ev = {"name" : cc.__class__.__name__,
+                    'candidate_pairs': cnt,
+                    'adjacent_bits': 12}
+
+            for keys, items in ev.items():
+                cc_ev[keys] = round(items, 2) if isinstance(items, float) else items
+
+            cc_ev['config'] = configuration
+
+
+            filename = f"{cc.__class__.__name__}_12.csv"
+            loaded = os.path.exists(f"{RESULTS}/{filename}")
+            df = pd.DataFrame([cc_ev])
+            df.to_csv(f'{RESULTS}/{filename}',
+                mode='a+', index=False, header=not loaded)
 
             new_blocks = {}
             if len(blocks) > new_bloom.bounds[0]:
@@ -134,22 +157,40 @@ if __name__ == '__main__':
                     df = pd.DataFrame([matcher_ev])
                     df.to_csv(f'{RESULTS}/matching/{cc.__class__.__name__}/{matcher_filename}', mode='a+', index=False,
                         header=not loaded)
-                    for clustering in [kiraly, connected, unique]:
-                        clustering_name = clustering.__class__.__name__
-                        clustering_filename = f"{clustering_name}_{metric}.csv"
-                        clusters = clustering.process(graph, new_bloom, thr)
-                        ev_cl = clustering.evaluate(clusters, verbose=False)
-                        cluster_ev = {
-                            'name': f'Clustering with {clustering_name}',
-                            'adjacent_bits': 12,
-                            'total_clusters': len(clusters),
-                            'threshold': thr,
-                            'matcher': metric,
-                        }
-                        for keys, items in ev_cl.items():
-                            cluster_ev[keys] = round(items, 2) if isinstance(items, float) else items
-                        cluster_ev['config'] = configuration
-                        loaded = os.path.exists(f"{RESULTS}/clustering/{cc.__class__.__name__}/{clustering_filename}")
-                        df = pd.DataFrame([cluster_ev])
-                        df.to_csv(f'{RESULTS}/clustering/{cc.__class__.__name__}/{clustering_filename}', mode='a+', index=False,
-                            header=not loaded)
+
+                    if similarity == 5:
+                        Path(f".graphs/bloom_{configuration['num_hashes']}/{metric}").mkdir(parents=True,
+                                                                exist_ok=True)
+                        edges, weights = graph
+
+                        if not isinstance(edges, np.ndarray):
+                            edges = edges.get()
+
+                        if not isinstance(weights, np.ndarray):
+                            weights = weights.get()
+
+                        np.savez_compressed(f".graphs/bloom_{configuration['num_hashes']}/{metric}/graph_{cc.__class__.__name__}.npz",
+                            edges=edges, weights=weights, allow_pickle=True)
+
+
+
+
+                    # for clustering in [kiraly, connected, unique]:
+                    #     clustering_name = clustering.__class__.__name__
+                    #     clustering_filename = f"{clustering_name}_{metric}.csv"
+                    #     clusters = clustering.process(graph, new_bloom, thr)
+                    #     ev_cl = clustering.evaluate(clusters, verbose=False)
+                    #     cluster_ev = {
+                    #         'name': f'Clustering with {clustering_name}',
+                    #         'adjacent_bits': 12,
+                    #         'total_clusters': len(clusters),
+                    #         'threshold': thr,
+                    #         'matcher': metric,
+                    #     }
+                    #     for keys, items in ev_cl.items():
+                    #         cluster_ev[keys] = round(items, 2) if isinstance(items, float) else items
+                    #     cluster_ev['config'] = configuration
+                    #     loaded = os.path.exists(f"{RESULTS}/clustering/{cc.__class__.__name__}/{clustering_filename}")
+                    #     df = pd.DataFrame([cluster_ev])
+                    #     df.to_csv(f'{RESULTS}/clustering/{cc.__class__.__name__}/{clustering_filename}', mode='a+', index=False,
+                    #         header=not loaded)
