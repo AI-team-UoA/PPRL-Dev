@@ -1,3 +1,0 @@
-name,candidate_pairs,adjacent_bits,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
-CardinalityEdgePruning,1032461,12,0.22,100.0,0.45,2304,1030157,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-CardinalityEdgePruning,1631769,12,0.14,100.0,0.28,2304,1629465,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

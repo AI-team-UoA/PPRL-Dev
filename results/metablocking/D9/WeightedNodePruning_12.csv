@@ -1,3 +1,0 @@
-name,candidate_pairs,adjacent_bits,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
-WeightedNodePruning,100301571,12,0.0,100.0,0.0,2304,100299267,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-WeightedNodePruning,109889546,12,0.0,100.0,0.0,2304,109887242,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

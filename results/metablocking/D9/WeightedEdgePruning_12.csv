@@ -1,4 +1,0 @@
-name,candidate_pairs,adjacent_bits,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
-WeightedEdgePruning,28331654,12,0.01,100.0,0.02,2304,28329350,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-WeightedEdgePruning,28331654,12,0.01,100.0,0.02,2304,28329350,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-WeightedEdgePruning,32727909,12,0.01,100.0,0.01,2304,32725605,61522,0,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"

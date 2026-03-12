@@ -1,5 +1,0 @@
-name,candidate_pairs,adjacent_bits,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
-CardinalityNodePruning,1973398,12,0.12,99.83,0.23,2300,1971098,61518,4,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-CardinalityNodePruning,1973398,12,0.12,99.83,0.23,2300,1971098,61518,4,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-CardinalityNodePruning,1973398,12,0.12,99.83,0.23,2300,1971098,61518,4,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
-CardinalityNodePruning,3134587,12,0.07,99.91,0.15,2302,3132285,61520,2,"{'attributes': ['title'], 'size': 1024, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
