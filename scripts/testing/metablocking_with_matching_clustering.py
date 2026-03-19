@@ -22,7 +22,6 @@ from pprl.comparison_cleaning import (
     WeightedEdgePruning
 )
 
-from pprl.pyjedai_comparison_cleaning import CardinalityEdgePruning as PYJEDAICardinalityEdgePruning
 from utils import (
     config_bloom_filter_with_configuration,
     load_dataframe,
@@ -51,7 +50,7 @@ if __name__ == '__main__':
     BLOOM_NAME = 'metablocking'
     print(f"Running METABLOCKING for {DIR}")
 
-    wep = WeightedNodePruning()
+    wep = CardinalityEdgePruning()
 
     size = 1024
     qgrams = 4
@@ -72,7 +71,7 @@ if __name__ == '__main__':
                             BLOOM_NAME, loaded_dataframe)
 
         blocks = wep.process(encoded_data = new_bloom,
-                    adjacent_bits = num_hashes // 4)
+                    adjacent_bits = num_hashes)
 
 
         # print("Threshold:", wep._threshold)
@@ -80,7 +79,7 @@ if __name__ == '__main__':
         candidate_pairs_len = 0
         for pairs in blocks.values():
             candidate_pairs_len += len(pairs)
-        print(f"num_hashse: {num_hashes}, Candidate pairs: {candidate_pairs_len}, \
+        print(f"{wep.__class__.__name__} num_hashse: {num_hashes}, Candidate pairs: {candidate_pairs_len}, \
             Recall: {ev['Recall %']}")
 
     exit(10)

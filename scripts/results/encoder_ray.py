@@ -32,37 +32,29 @@ import ast
 
 if __name__ == '__main__':
 
-    DIR = "D10"
+    DIR = "D4"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'imdbclean'
-    FILE2 = 'dbpediaclean'
-    attributes = [['title', 'starring']]
+    FILE = 'dblpclean'
+    FILE2 = 'acmclean'
+    attributes = [['title']]
+    SEP = '%'
 
 
-    SEP = '|'
-    RESULTS = f"results/blocking/{DIR}"
+    RESULTS = f"results/blocking_new/{DIR}"
 
-    size = [512]
-    qgrams = [4]
-    TOTAL_LENGTH = 16
+    size = [64, 128, 256, 512, 1024]
+    qgrams = [2, 3, 4]
+    TOTAL_LENGTH = 266
 
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
 
-    print(f"Runing experiments for {DIR}")
-
+    print(f"Running experiments for {DIR}")
 
     adjacent_config = {}
-    for adjacent_bits in [1,2,4,8,10,12]:
-
-        FILENAME = f"blocking_encoder_{adjacent_bits}.csv"
-        df  = pd.read_csv(f'{RESULTS}/{FILENAME}')
-        df['config'] = df['config'].apply(ast.literal_eval)
-        config_list = df['config'].to_list()
-        adjacent_config[adjacent_bits] = config_list
 
 
     futures = []
-    MAX_CONCURRENT = 6
+    MAX_CONCURRENT = 20
     if not ray.is_initialized():
         logging.getLogger("ray").setLevel(logging.ERROR)
         ray.init(log_to_driver=False, logging_level=logging.ERROR)
@@ -73,12 +65,8 @@ if __name__ == '__main__':
     for configuration, new_bloom in tqdm(
         config_bloom_filter(attributes, size, qgrams,
                 'standard_blokcing', loaded_dataframe, adjacent_config),
-        total=TOTAL_LENGTH):
+        total=TOTAL_LENGTH, desc="Running experiments for Encoder", leave=True, position=0):
 
-
-
-        if configuration is None and new_bloom is None:
-            continue
 
         for adjacent_bits in [1,2,4,8,10,12]:
             if adjacent_config \

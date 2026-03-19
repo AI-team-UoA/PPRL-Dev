@@ -144,7 +144,7 @@ def evaluate_encoder_ray(new_bloom: BloomEncodedData,
             adjacent_bits: int, configuration: dict):
     """Experiments for comparison Cleaning"""
 
-    ev: dict = new_bloom.serial_evaluate(adjacent_bits = adjacent_bits,
+    ev: dict = new_bloom.evaluate(adjacent_bits = adjacent_bits,
                     verbose = False)
 
     my_ev = {'name': 'Encoder',

@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
     gt = pd.read_csv(f'{path}/gt.csv' , sep=',')
     new_bloom.set_ground_truth(gt)
-    new_bloom.serial_evaluate(adjacent_bits=200, verbose=True)
+    new_bloom.serial_evaluate(adjacent_bits=1, verbose=True)
     print(new_bloom.candidate_pairs)
     print(len(new_bloom.candidate_pairs))
 

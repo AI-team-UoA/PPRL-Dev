@@ -66,7 +66,7 @@ class BloomFilter:
 
 
 
-    def hash(self, str_to_enc: str) -> List[int]:
+    def generate_hash(self, str_to_enc: str) -> List[int]:
         """Return Bloom filter bit positions
         for the given string using the selected hashing method.
 
@@ -89,10 +89,10 @@ class BloomFilter:
         bloom_dict = {}
         if self.attributes:
             for attribute in self.attributes:
-                bloom_dict[attribute] = self.hash(getattr(row,attribute))
+                bloom_dict[attribute] = self.generate_hash(getattr(row,attribute))
         else:
             flatten_row = " ".join(str(x) for x in row)
-            bloom_dict['row'] = self.hash(flatten_row)
+            bloom_dict['row'] = self.generate_hash(flatten_row)
         return bloom_dict
 
 
@@ -100,7 +100,9 @@ class BloomFilter:
         bloom_dict = {}
         total_length = len(df)
         for i, row in tqdm(enumerate(df.itertuples(index=False)),
-                        total=total_length, desc='Encoding Data'):
+                        total=total_length,
+                        desc=f'Encoding Data with attributes {self.attributes}',
+                        leave=False, position=1):
             bloom_dict[i] = self._create_bloom_dict_for_row(row)
         return BloomEncodedData(data = bloom_dict, length=self.size + self.offset, )  #leng
 
@@ -115,15 +117,26 @@ class BloomFilter:
                 position = (int.from_bytes(segment, 'little') % self.size) + self.offset
                 bf.add(position)
         else:
+            if len(token) < self.qgrams:
+                token = token.ljust(self.qgrams, '_')
+
             for i in range(len(token) - self.qgrams + 1):
                 qgram_token = token[i:i+self.qgrams]
-                if qgram_token == '_':
-                    continue
-                for i in range(self.num_hashes):
-                    salted_token = f"{qgram_token}{i}{self.salt}".encode("utf-8")
-                    hashed = hashlib.sha256(salted_token).digest()
-                    position = (int.from_bytes(hashed, "little") % self.size) + self.offset
+                base_string = f"{qgram_token}{self.salt}".encode("utf-8")
+                hashed = hashlib.sha256(base_string).digest()
+
+                h1 = int.from_bytes(hashed[:8], 'little')
+                h2 = int.from_bytes(hashed[8:], 'little')
+
+                for j in range(self.num_hashes):
+                    combined_hash = (h1 + j * h2) % self.size
+                    position = combined_hash + self.offset
                     bf.add(position)
+                # for j in range(self.num_hashes):
+                #     salted_token = f"{qgram_token}{j}{self.salt}".encode("utf-8")
+                #     hashed = hashlib.sha256(salted_token).digest()
+                #     position = (int.from_bytes(hashed, "little") % self.size) + self.offset
+                #     bf.add(position)
 
         return bf
 
@@ -224,7 +237,6 @@ class BloomFilter:
                     raise ValueError("Attributes must be the same between the two dataframes")
         else:
             self.attributes = columns
-        print(f'Encrypting these attributes: {self.attributes}')
 
         df = df[self.attributes] if self.attributes else df
         return self._encode(df)
