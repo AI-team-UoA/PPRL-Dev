@@ -4,11 +4,13 @@ import time
 from itertools import combinations, product
 from typing import Literal, List, Dict, overload, Tuple, Union, Set
 from dataclasses import dataclass
+import logging
 import numpy as np
 from ordered_set import OrderedSet
 from tqdm.auto import tqdm
 import pandas as pd
-
+import numexpr as ne
+import ray
 from pprl.utils import _dice, _scm, _cosine, _jaccard
 from pprl.datamodel import  Block, EncodedData
 from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
@@ -28,8 +30,9 @@ class MatcherConfig:
     threshold : float
     metric : str
     attributes : List[str]
-    candidates : Set
-    unique_ids : OrderedSet
+    candidates : np.array
+    unique_ids : np.array
+    workers : int = 1
 
 class Matcher(PPRLFeature):
     """Matcher class for pprl"""
@@ -40,16 +43,22 @@ class Matcher(PPRLFeature):
     def __init__(self,
         batch_size : int = 10_000,
         threshold : float = 0.6,
+        workers : int = 1,
         metric : Literal["dice", "scm", 'jaccard', "cosine"] = "dice",
         attributes : List[str] = None,
     ) -> None:
         super().__init__()
         self.matcher_config = MatcherConfig(batch_size=batch_size,
             threshold=threshold, metric=metric,
-            attributes=attributes, candidates=None, unique_ids=None)
+            attributes=attributes, candidates=None,
+            unique_ids=None, workers=workers)
         self.execution_time : float = 0.0
         self.encoded_data : EncodedData
         self.ground_truth : pd.DataFrame
+        if not ray.is_initialized():
+            logging.getLogger("ray").setLevel(logging.ERROR)
+            ray.init(log_to_driver=False, logging_level=logging.ERROR)
+
 
         # NOTE: OPENFHE
         # self.cc : CryptoContext
@@ -60,44 +69,34 @@ class Matcher(PPRLFeature):
         """Updates graph based on a new threshold"""
         self.matcher_config.threshold = threshold
         edges, weights = graph
-        mask = self.matcher_config.threshold < weights
+
+        mask = ne.evaluate("threshold < weights")
+
+        # mask = self.matcher_config.threshold < weights
         edges = edges[mask]
         weights = weights[mask]
         return edges, weights
 
     def _candidates(self,
-            extract_candidates: Union[Dict[str, Block], EncodedData]) -> Tuple[set, OrderedSet]:
-        candidates = set()
-        unique_ids = OrderedSet()
+            extract_candidates: Union[Dict[str, Block], EncodedData]) -> None:
 
-        if isinstance(extract_candidates, dict):
-            _, first_value = next(iter(extract_candidates.items()))
-            if isinstance(first_value, Block):
-                for _, block in extract_candidates.items():
-                    for d1, d2 in combinations(block.entities.values(), 2):
-                        for eid1, eid2 in product(d1, d2):
-                            candidates.add((eid1,eid2))
-                            unique_ids.add(eid1)
-                            unique_ids.add(eid2)
-            else:
-                for eid1, eid2s in extract_candidates.items():
-                    for eid2 in eid2s:
-                        candidates.add((eid1,eid2))
-                        unique_ids.add(eid1)
-                        unique_ids.add(eid2)
-        else:
-            start = 0
-            for i, bound in enumerate(extract_candidates.bounds):
-                d1 = range(start, bound)
-                for j in range(i+1, len(extract_candidates.bounds)):
-                    d2 = range(extract_candidates.bounds[j-1], extract_candidates.bounds[j])
+
+        _, first_value = next(iter(extract_candidates.items()))
+        if isinstance(first_value, Block):
+            candidates = set()
+            for _, block in extract_candidates.items():
+                for d1, d2 in combinations(block.entities.values(), 2):
                     for eid1, eid2 in product(d1, d2):
                         candidates.add((eid1,eid2))
-                        unique_ids.add(eid1)
-                        unique_ids.add(eid2)
-                start = bound
+            self.matcher_config.candidates = np.array(list(candidates))
+        else:
+            entity_ids_1 = list(extract_candidates.keys())
+            entity_ids_2 = [list(v) for v in extract_candidates.values()]
+            entity_ids_1_array = np.repeat(entity_ids_1, [len(v) for v in entity_ids_2])
+            entity_ids_2_array = np.concatenate(entity_ids_2)
+            self.matcher_config.candidates = np.column_stack([entity_ids_1_array, entity_ids_2_array])
 
-        return candidates, unique_ids
+        self.matcher_config.unique_ids = np.unique(self.matcher_config.candidates)
 
     @overload
     def predict(self,
@@ -164,10 +163,7 @@ class Matcher(PPRLFeature):
             self.ground_truth = encoded_data.ground_truth
 
         if blocks:
-            self.matcher_config.candidates, self.matcher_config.unique_ids = \
             self._candidates(blocks)
-        else:
-            self.matcher_config.candidates = self.matcher_config.unique_ids = None
 
 
         if isinstance(encoded_data, BloomEncodedData):
@@ -247,10 +243,16 @@ class Matcher(PPRLFeature):
 
         # return graph
 
-    def _predict_batches(self,
+
+    @staticmethod
+    @ray.remote
+    def _predict_batches(
             batch_pairs : np.array,
             bloom_matrix: np.array,
-            unique_ids_arr: np.array) -> List[Tuple[int, int, float]]:
+            unique_ids_arr: np.array,
+            threshold: float,
+            metric: str = 'dice',
+            ) -> List[Tuple[int, int, float]]:
 
         metrics_dict = {
             "dice" : _dice,
@@ -260,14 +262,14 @@ class Matcher(PPRLFeature):
         }
 
 
-        _metric = metrics_dict.get(self.matcher_config.metric,
+        _metric = metrics_dict.get(metric,
                             metrics_dict['dice'])
 
         avg_similarities : np.array = _metric(
                 bloom_matrix[batch_pairs[:,0]],
                 bloom_matrix[batch_pairs[:,1]])
 
-        mask = avg_similarities >= self.matcher_config.threshold
+        mask = avg_similarities >= threshold
 
         if not np.any(mask):
             return [], [], []
@@ -317,13 +319,16 @@ class Matcher(PPRLFeature):
         return bloom_filter_matrix
 
     def _get_unique_ids(self) -> tuple:
-        id_to_idx = {eid: idx \
-                for idx, eid in enumerate(self.matcher_config.unique_ids)}
-        unique_ids_arr = np.array(self.matcher_config.unique_ids)
 
-        idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
-                        for eid1, eid2 in self.matcher_config.candidates])
-        n_candidates = len(idx_pairs)
+        sorter = np.argsort(self.matcher_config.unique_ids)
+
+        idx_pairs = sorter[
+            np.searchsorted(self.matcher_config.unique_ids,
+                    self.matcher_config.candidates, sorter=sorter)
+            ]
+        unique_ids_arr = self.matcher_config.unique_ids
+        n_candidates = idx_pairs.shape[0]
+
         return n_candidates, unique_ids_arr, idx_pairs
 
     def _get_unique_ids_dense(self) -> tuple:
@@ -333,26 +338,52 @@ class Matcher(PPRLFeature):
         n_candidates = ids_1 * ids_2
         return n_candidates, unique_ids_arr
 
+    def _future_wait_workers(self,
+                futures: list,
+                edges_list: list,
+                edges_weights_list: list) -> tuple:
+
+        finished, futures = ray.wait(futures, num_returns=1)
+        for done in finished:
+            src, tgt, weights = ray.get(done)
+            edges_list.append(np.column_stack((src, tgt)))
+            edges_weights_list.append(weights)
+
+        return futures, edges_list, edges_weights_list
+
     def _match_all(self, n_candidates: int,
         bloom_matrix: np.array, unique_ids_arr: np.array,
         idx_pairs: np.array = None) -> tuple:
 
         edges_list = []
         edges_weights_list = []
+        futures = []
         for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
                     desc="Predicting batches", position=1, leave=False):
             end = min(start + self.matcher_config.batch_size, n_candidates)
             batch_pairs=idx_pairs[start:end]
-            src, tgt, weights = self._predict_batches(batch_pairs,
-                                bloom_matrix, unique_ids_arr)
-            edges_list.append(np.column_stack((src, tgt)))
-            edges_weights_list.append(weights)
+            futures.append(
+                self._predict_batches.remote(batch_pairs,
+                                    bloom_matrix,
+                                    unique_ids_arr,
+                                    self.matcher_config.threshold,
+                                    self.matcher_config.metric)
+            )
+            if len(futures) >= self.matcher_config.workers:
+                futures, edges_list, edges_weights_list = \
+                    self._future_wait_workers(
+                        futures, edges_list, edges_weights_list)
+        while futures:
+            futures, edges_list, edges_weights_list = \
+                self._future_wait_workers(
+                    futures, edges_list, edges_weights_list)
 
         return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
     def _match_all_is_dense(self, n_candidates: int,
         bloom_matrix: np.array, unique_ids_arr: np.array) -> tuple:
 
+        futures = []
         edges_list = []
         edges_weights_list = []
         for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
@@ -363,10 +394,22 @@ class Matcher(PPRLFeature):
                             self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
             cols += self.encoded_data.bounds[0]
             batch_pairs = np.column_stack((rows, cols))
-            src, tgt, weights = self._predict_batches(batch_pairs,
-                                bloom_matrix, unique_ids_arr)
-            edges_list.append(np.column_stack((src, tgt)))
-            edges_weights_list.append(weights)
+            futures.append(
+                self._predict_batches.remote(batch_pairs,
+                        bloom_matrix,
+                        unique_ids_arr,
+                        self.matcher_config.threshold,
+                        self.matcher_config.metric)
+            )
+            if len(futures) >= self.matcher_config.workers:
+                futures, edges_list, edges_weights_list = \
+                    self._future_wait_workers(
+                        futures, edges_list, edges_weights_list)
+
+        while futures:
+            futures, edges_list, edges_weights_list = \
+                self._future_wait_workers(
+                    futures, edges_list, edges_weights_list)
         return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
@@ -378,7 +421,7 @@ class Matcher(PPRLFeature):
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
 
-        if self.matcher_config.unique_ids:
+        if self.matcher_config.unique_ids is not None:
             n_candidates, unique_ids_arr, idx_pairs = self._get_unique_ids()
             return self._match_all(n_candidates, bloom_matrix, unique_ids_arr, idx_pairs)
 

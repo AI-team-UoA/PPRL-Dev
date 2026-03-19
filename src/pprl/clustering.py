@@ -10,7 +10,7 @@ from scipy.sparse.csgraph import connected_components
 import numpy as np
 from pprl.encoded_data import BloomEncodedData
 from pprl.base_clustering import AbstractClustering
-
+from pprl.nummba.clustering import *
 
 RANDOM_SEED = 42
 
@@ -58,10 +58,12 @@ class ConnectedComponentsClustering(AbstractClustering):
         else:
             valid_array = edges
 
+        int_valid_array = valid_array.astype(np.int64)
+        resulting_clusters = numba_isolated_edges(int_valid_array).tolist()
 
-        resulting_clusters = self.scipi_connected_components(
-            edges=valid_array
-        )
+        # self.scipi_connected_components(
+        #     edges=valid_array
+        # )
 
         self.execution_time = time() - start_time
         return resulting_clusters
@@ -120,16 +122,8 @@ class UniqueMappingClustering(AbstractClustering):
 
 
     def _get_unique_edges(self, candidates: np.array) -> np.array:
-
-        used = np.zeros(candidates.max() + 1, dtype=bool)
-        unique_edge_indices = []
-        for i, (u,v) in enumerate(candidates):
-            if not used[u] and not used[v]:
-                used[u] = True
-                used[v] = True
-                unique_edge_indices.append(i)
-
-        return candidates[unique_edge_indices]
+        int_candidates = candidates.astype(np.int64)
+        return numba_get_unique_edges(int_candidates)
 
     def process(self, graph: Tuple[np.array, np.array], encoded_data: BloomEncodedData,
             similarity_threshold: float = 0.1) -> list:
@@ -156,9 +150,10 @@ class UniqueMappingClustering(AbstractClustering):
         candidates = candidates[:edges.shape[0]*2]
         unique_edges = self._get_unique_edges(candidates)
 
-        clusters = ConnectedComponentsClustering.scipi_connected_components(
-            edges=unique_edges,
-        )
+        clusters = numba_isolated_edges(unique_edges).tolist()
+        # ConnectedComponentsClustering.scipi_connected_components(
+        #     edges=unique_edges,
+        # )
         self.execution_time = time() - start_time
         return clusters
 
@@ -276,9 +271,9 @@ class _KiralyVectors:
     is_uncertain: np.array
     fiances: np.array
 
-    def __init__(self, men_len: int,
+    def __init__(self, candidates_len: int, men_len: int,
         women_len: int) -> None:
-        self.men_active = np.full(men_len, True, bool)
+        self.men_active = np.full(candidates_len, True, bool)
         self.edge_score = np.full((men_len, women_len), -np.inf)
         self.edge_index = np.full((men_len, women_len), -1, dtype=int)
         self.is_bachelor = np.full(men_len, False, bool)
@@ -457,7 +452,7 @@ class KiralyMSMApproximateClustering(AbstractClustering):
         for i, m in enumerate(key_men_candidates):
             men_to_indices[m].append(i)
 
-        kv = _KiralyVectors(self.encoded_data.bounds[0],
+        kv = _KiralyVectors(sorted_edges.shape[0], self.encoded_data.bounds[0],
                 self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
         free_men = deque(men.tolist())
         current_matches = self._get_current_matches(free_men, kv,

@@ -4,19 +4,25 @@ import os
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
+from math import log10, sqrt
+import numpy as np
+from scipy.sparse import csr_matrix, diags, coo_matrix
+
 from pprl.clustering import (
     ConnectedComponentsClustering,
     KiralyMSMApproximateClustering,
     UniqueMappingClustering
 )
-from pprl.matching import Matcher
+from pprl.ray.matching import Matcher
 
 from pprl.comparison_cleaning import (
     CardinalityEdgePruning,
     CardinalityNodePruning,
-    WeightedNodePruning, 
+    WeightedNodePruning,
     WeightedEdgePruning
 )
+
+from pprl.pyjedai_comparison_cleaning import CardinalityEdgePruning as PYJEDAICardinalityEdgePruning
 from utils import (
     config_bloom_filter_with_configuration,
     load_dataframe,
@@ -25,7 +31,6 @@ from utils import (
 
 if __name__ == '__main__':
 
-
     DIR = "D2"
     PATH = f"data/ccer/{DIR}"
     FILE = 'abtclean'
@@ -33,41 +38,69 @@ if __name__ == '__main__':
     attributes = ['name']
     SEP = "|"
 
+
+
+    # DIR = "D9"
+    # PATH = f"data/ccer/{DIR}"
+    # FILE = 'dblpclean'
+    # FILE2 = 'scholarclean'
+    # attributes = ['title']
+    # SEP = ">"
+
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
     BLOOM_NAME = 'metablocking'
     print(f"Running METABLOCKING for {DIR}")
 
-    wep = CardinalityNodePruning()
+    wep = WeightedNodePruning()
 
     size = 1024
     qgrams = 4
-
+    unique = UniqueMappingClustering()
+    connected = ConnectedComponentsClustering()
     kiraly = KiralyMSMApproximateClustering()
+    key = None
+    for num_hashes in [10, 15, 20, 25, 30]:
+        configuration = {'attributes': attributes,
+            'size': size,
+            'offset': 0,
+            'num_hashes': num_hashes,
+            'hashing_type': 'salted_qgrams',
+            'salt': '',
+            'qgrams': qgrams
+        }
+        new_bloom = config_bloom_filter_with_configuration(configuration,
+                            BLOOM_NAME, loaded_dataframe)
 
-    num_hashes = 1
-    configuration = {'attributes': attributes,
-        'size': size,
-        'offset': 0,
-        'num_hashes': num_hashes,
-        'hashing_type': 'salted_qgrams',
-        'salt': '',
-        'qgrams': qgrams
-    }
-    new_bloom = config_bloom_filter_with_configuration(configuration,
-                        BLOOM_NAME, loaded_dataframe)
-
-    blocks = wep.process(encoded_data = new_bloom,
-                adjacent_bits = 12)
-    # print("Threshold:", wep._threshold)
-    ev = wep.evaluate(blocks, verbose=True)
+        blocks = wep.process(encoded_data = new_bloom,
+                    adjacent_bits = num_hashes // 4)
 
 
+        # print("Threshold:", wep._threshold)
+        ev = wep.evaluate(blocks, verbose=False)
+        candidate_pairs_len = 0
+        for pairs in blocks.values():
+            candidate_pairs_len += len(pairs)
+        print(f"num_hashse: {num_hashes}, Candidate pairs: {candidate_pairs_len}, \
+            Recall: {ev['Recall %']}")
+
+    exit(10)
     metric = 'cosine'
-    thr = 0.7
-    matcher = Matcher(batch_size=10_000,
+    thr = 0.05
+    matcher = Matcher(batch_size=10_000, workers=30,
                 threshold=thr, metric=metric)
     graph = matcher.predict(new_bloom, blocks)
     ev = matcher.evaluate(graph, verbose=True)
+
+    for cl in [unique, connected, kiraly]:
+        clusters = cl.process(graph, new_bloom,
+                                similarity_threshold=thr)
+
+        ev = cl.evaluate(clusters, verbose=True)
+    exit(10)
+    graph = matcher.update_graph(graph, 0.8)
+    ev = matcher.evaluate(graph, verbose=True)
+
+
     exit(10)
 
 
