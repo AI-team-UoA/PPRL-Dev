@@ -6,7 +6,7 @@ from bitarray import bitarray
 import pytest
 
 # Assuming your classes are accessible, e.g., from your_module
-from pprl.blocking import AbstractBlockBuilding, LSHBlocker, BitBlocker, FAISSBlocking
+from privjedai.blocking import AbstractBlockBuilding, LSHBlocker, BitBlocker, FAISSBlocking
 
 # If they are in the same file, you can import them directly.
 

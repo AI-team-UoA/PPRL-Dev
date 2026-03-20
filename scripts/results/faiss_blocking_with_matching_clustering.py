@@ -6,19 +6,19 @@ import os
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
-from privjedai.gpu.clustering import ConnectedComponentsClustering, KiralyMSMApproximateClustering, UniqueMappingClustering
-from privjedai.gpu.matching import Matcher
+from privjedai.clustering import ConnectedComponentsClustering, KiralyMSMApproximateClustering, UniqueMappingClustering
+from privjedai.ray.matching import Matcher
 from utils import config_bloom_filter_with_configuration, load_dataframe, config_bloom_filter
 from privjedai.blocking import FAISSBlocking
 
 if __name__ == '__main__':
 
 
-    DIR = "D10"
+    DIR = "D2"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'imdbclean'
-    FILE2 = 'dbpediaclean'
-    attributes = ['title','starring']
+    FILE = 'abtclean'
+    FILE2 = 'buyclean'
+    attributes = ['name']
     SEP = "|"
 
     RESULTS = f"results/faiss/{DIR}"
@@ -34,7 +34,7 @@ if __name__ == '__main__':
             f"{RESULTS}/clustering/{faiss_mode}"
         ).mkdir(parents=True, exist_ok=True)
 
-    size = 1024 // 2
+    size = 1024
     qgrams = 4
     TOTAL_LENGTH = 32
     kiraly = KiralyMSMApproximateClustering()
@@ -44,6 +44,7 @@ if __name__ == '__main__':
 
     for num_hashes in tqdm(range(1, 33), total=TOTAL_LENGTH,
                 position=0, desc="Total Progress", leave=True):
+
         configuration = {'attributes': attributes,
             'size': size,
             'offset': 0,
@@ -55,14 +56,29 @@ if __name__ == '__main__':
 
         new_bloom = config_bloom_filter_with_configuration(configuration,
                             BLOOM_NAME, loaded_dataframe)
-
         for faiss_mode in ['flat', 'hnsw', 'lsh']:
             faiss_blocking = FAISSBlocking(faiss_mode)
             matcher = None
             for k in tqdm(range(10), desc=f"{faiss_mode.upper()} Top-K",
                           position=1, leave=False,
                           total=10):
+
                 blocks = faiss_blocking.build_blocks(new_bloom, top_k=k+1)
+                ev : dict = faiss_blocking.evaluate(blocks, verbose = False)
+
+                candidate_pairs = 0
+                for val in blocks.values():
+                    candidate_pairs += len(val)
+                faiss_evaluation = {'name': f'FAISS {faiss_mode.upper()} Blocking',
+                        'candidate_pairs': candidate_pairs, 'top_k': k+1}
+                for keys, items in ev.items():
+                    faiss_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+                faiss_evaluation['config'] = configuration
+
+                filename = f"faiss_{faiss_mode}.csv"
+                df = pd.DataFrame([faiss_evaluation])
+                loaded = os.path.exists(f"{RESULTS}/{filename}")
+                df.to_csv(f'{RESULTS}/{filename}', mode='a+', index=False, header=not loaded)
                 for metric in ['cosine', 'dice', 'jaccard']:
                     for similarity in tqdm(
                         range(5,100,5), leave=False, position=2,

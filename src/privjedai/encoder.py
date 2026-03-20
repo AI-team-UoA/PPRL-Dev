@@ -125,8 +125,8 @@ class BloomFilter:
                 base_string = f"{qgram_token}{self.salt}".encode("utf-8")
                 hashed = hashlib.sha256(base_string).digest()
 
-                h1 = int.from_bytes(hashed[:8], 'little')
-                h2 = int.from_bytes(hashed[8:], 'little')
+                h1 = int.from_bytes(hashed[:16], 'little')
+                h2 = int.from_bytes(hashed[16:], 'little')
 
                 for j in range(self.num_hashes):
                     combined_hash = (h1 + j * h2) % self.size
