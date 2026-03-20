@@ -10,8 +10,8 @@ import ray
 import logging
 from utils import load_dataframe, config_bloom_filter_with_configuration,\
     config_bloom_filter, clustering_ray, matching_clustering_ray
-from pprl.matching import Matcher
-from pprl.clustering import AbstractClustering, UniqueMappingClustering, \
+from privjedai.matching import Matcher
+from privjedai.clustering import AbstractClustering, UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 

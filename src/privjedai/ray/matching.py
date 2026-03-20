@@ -11,11 +11,11 @@ from tqdm.auto import tqdm
 import pandas as pd
 import numexpr as ne
 import ray
-from pprl.utils import _dice, _scm, _cosine, _jaccard
-from pprl.datamodel import  Block, EncodedData
-from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
-from pprl.evaluation import Evaluation
-from pprl.datamodel import PPRLFeature
+from privjedai.utils import _dice, _scm, _cosine, _jaccard
+from privjedai.datamodel import  Block, EncodedData
+from privjedai.encoded_data import BloomEncodedData, HomomorphicEcnodedData
+from privjedai.evaluation import Evaluation
+from privjedai.datamodel import PPRLFeature
 
 # NOTE: OPENFHE
 # import pprl.openfhe_similarity

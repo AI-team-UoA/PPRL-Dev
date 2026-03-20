@@ -8,14 +8,14 @@ from itertools import product
 import pandas as pd
 from tqdm import tqdm
 
-from src.pprl.comparison_cleaning import (
+from src.privjedai.comparison_cleaning import (
     WeightedEdgePruning,
     WeightedNodePruning,
     CardinalityEdgePruning,
     CardinalityNodePruning,
     BLAST,
 )
-from src.pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from src.privjedai.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 
 
 if __name__ == '__main__':

@@ -10,8 +10,8 @@ rmm.reinitialize(pool_allocator=False)
 from pathlib import Path
 import pickle
 
-from pprl.gpu.matching import Matcher
-from pprl.gpu.clustering import UniqueMappingClustering, \
+from privjedai.gpu.matching import Matcher
+from privjedai.gpu.clustering import UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 

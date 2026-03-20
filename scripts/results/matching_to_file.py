@@ -11,9 +11,9 @@ from pathlib import Path
 
 # Enable managed memory to allow oversubscribing GPU memory
 import pickle
-from pprl.clustering import UniqueMappingClustering, \
+from privjedai.clustering import UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
-from pprl.matching_gpu import Matcher
+from privjedai.matching_gpu import Matcher
 
 
 if __name__ == '__main__':

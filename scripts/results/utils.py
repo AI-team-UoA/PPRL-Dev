@@ -9,11 +9,11 @@ import time
 from tqdm import tqdm
 import ray
 import ray.actor
-from pprl.matching import Matcher
+from privjedai.matching import Matcher
 import numpy as np
-from pprl.comparison_cleaning import AbstractMetablocking
-from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
-from pprl.clustering import AbstractClustering, UniqueMappingClustering, \
+from privjedai.comparison_cleaning import AbstractMetablocking
+from privjedai.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from privjedai.clustering import AbstractClustering, UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
 def load_dataframe(path: str, files: tuple, sep: str):

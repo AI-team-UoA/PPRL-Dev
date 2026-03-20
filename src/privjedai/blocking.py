@@ -8,9 +8,9 @@ from abc import abstractmethod
 import faiss
 from bitarray import bitarray
 import numpy as np
-from pprl.datamodel import  Block, PPRLFeature, EncodedData
-from pprl.encoded_data import BloomEncodedData
-from pprl.evaluation import Evaluation
+from privjedai.datamodel import  Block, PPRLFeature, EncodedData
+from privjedai.encoded_data import BloomEncodedData
+from privjedai.evaluation import Evaluation
 
 
 class AbstractBlockProcessing(PPRLFeature):

@@ -1,8 +1,8 @@
 import pandas as pd
 
-from pprl.encoder import BloomFilter, BloomFilterConfig
-from pprl.datamodel import  Block
-from pprl.encoded_data import BloomEncodedData
+from privjedai.encoder import BloomFilter, BloomFilterConfig
+from privjedai.datamodel import  Block
+from privjedai.encoded_data import BloomEncodedData
 
 
 

@@ -1,7 +1,7 @@
-from src.pprl.encoder import HomomorphicEncryption
-from src.pprl.matching import Matcher
+from src.privjedai.encoder import HomomorphicEncryption
+from src.privjedai.matching import Matcher
 import pandas as pd
-from src.pprl.datamodel import Data
+from src.privjedai.datamodel import Data
 from openfhe import *
 import re
 import hashlib

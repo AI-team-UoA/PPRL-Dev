@@ -5,14 +5,14 @@ from pathlib import Path
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-from pprl.clustering import (
+from privjedai.clustering import (
     ConnectedComponentsClustering,
     KiralyMSMApproximateClustering,
     UniqueMappingClustering
 )
-from pprl.ray.matching import Matcher
+from privjedai.ray.matching import Matcher
 
-from pprl.comparison_cleaning import (
+from privjedai.comparison_cleaning import (
     WeightedEdgePruning,
     WeightedNodePruning,
     CardinalityEdgePruning,

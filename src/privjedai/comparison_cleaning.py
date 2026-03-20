@@ -11,10 +11,10 @@ from scipy.sparse import csr_matrix, diags, coo_matrix
 import pandas as pd
 import numpy as np
 from tqdm.auto import tqdm
-from pprl.evaluation import Evaluation
-from pprl.datamodel import PPRLFeature
-from pprl.encoded_data import BloomEncodedData
-from pprl.utils import chi_square
+from privjedai.evaluation import Evaluation
+from privjedai.datamodel import PPRLFeature
+from privjedai.encoded_data import BloomEncodedData
+from privjedai.utils import chi_square
 
 
 

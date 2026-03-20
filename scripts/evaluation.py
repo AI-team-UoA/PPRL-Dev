@@ -2,12 +2,12 @@
 import sys
 import pandas as pd
 from networkx import Graph
-from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
-from pprl.blocking import FAISSBlocking
-from pprl.comparison_cleaning import WeightedEdgePruning, \
+from privjedai.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from privjedai.blocking import FAISSBlocking
+from privjedai.comparison_cleaning import WeightedEdgePruning, \
     CardinalityEdgePruning, CardinalityNodePruning, WeightedNodePruning, \
     BLAST
-from pprl.matching import Matcher
+from privjedai.matching import Matcher
 from pybloom_live import BloomFilter as Bloom
 import itertools
 import math

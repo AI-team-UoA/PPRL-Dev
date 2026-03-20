@@ -1,7 +1,7 @@
 """Utils methods for many classes"""
 from typing import  Dict
 import numpy as np
-from pprl.datamodel import Block
+from privjedai.datamodel import Block
 
 POPCOUNT_TABLE = np.array([bin(x).count('1') for x in range(256)], dtype=np.uint8)
 

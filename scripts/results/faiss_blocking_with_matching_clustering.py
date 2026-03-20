@@ -6,10 +6,10 @@ import os
 from pathlib import Path
 import pandas as pd
 from tqdm import tqdm
-from pprl.gpu.clustering import ConnectedComponentsClustering, KiralyMSMApproximateClustering, UniqueMappingClustering
-from pprl.gpu.matching import Matcher
+from privjedai.gpu.clustering import ConnectedComponentsClustering, KiralyMSMApproximateClustering, UniqueMappingClustering
+from privjedai.gpu.matching import Matcher
 from utils import config_bloom_filter_with_configuration, load_dataframe, config_bloom_filter
-from pprl.blocking import FAISSBlocking
+from privjedai.blocking import FAISSBlocking
 
 if __name__ == '__main__':
 

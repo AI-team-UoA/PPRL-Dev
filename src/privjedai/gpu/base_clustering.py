@@ -5,9 +5,9 @@ Docstring for pprl.clustering
 import cupy as cp
 from tqdm.autonotebook import tqdm
 import pandas as pd
-from pprl.datamodel import PPRLFeature
-from pprl.encoded_data import BloomEncodedData
-from pprl.gpu.evaluation import Evaluation
+from privjedai.datamodel import PPRLFeature
+from privjedai.encoded_data import BloomEncodedData
+from privjedai.gpu.evaluation import Evaluation
 
 RANDOM_SEED = 42
 

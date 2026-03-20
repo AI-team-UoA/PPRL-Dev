@@ -5,7 +5,7 @@ from typing import List, Tuple, Dict
 import numpy as np
 import cupy as cp
 from networkx import Graph
-from pprl.datamodel import Block
+from privjedai.datamodel import Block
 
 POPCOUNT_TABLE = np.array([bin(x).count('1') for x in range(256)], dtype=np.uint8)
 

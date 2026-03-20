@@ -6,7 +6,7 @@ import os
 import pandas as pd
 from tqdm import tqdm
 from utils import load_dataframe, config_bloom_filter
-from pprl.blocking import FAISSBlocking
+from privjedai.blocking import FAISSBlocking
 
 if __name__ == '__main__':
 

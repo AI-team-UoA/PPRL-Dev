@@ -5,22 +5,20 @@ from itertools import combinations, product
 from typing import Literal, List, Dict, overload, Tuple, Union, Set
 from dataclasses import dataclass
 import numpy as np
-import cupy as cp
 from ordered_set import OrderedSet
 from tqdm.auto import tqdm
 import pandas as pd
 
-from pprl.gpu.utils import _dice, _scm, _cosine, _jaccard
-from pprl.datamodel import  Block, EncodedData
-from pprl.encoded_data import BloomEncodedData, HomomorphicEcnodedData
-from pprl.evaluation import Evaluation
-from pprl.datamodel import PPRLFeature
-
+from privjedai.utils import _dice, _scm, _cosine, _jaccard
+from privjedai.datamodel import  Block, EncodedData
+from privjedai.encoded_data import BloomEncodedData, HomomorphicEcnodedData
+from privjedai.evaluation import Evaluation
+from privjedai.datamodel import PPRLFeature
 
 # NOTE: OPENFHE
+# import pprl.openfhe_similarity
 # from openfhe import CCParamsBGVRNS, SecurityLevel, \
 #     CryptoContext, GenCryptoContext, KeyPair, PKESchemeFeature # pylint: disable=no-name-in-module
-# import pprl.openfhe_similarity
 
 
 @dataclass
@@ -30,8 +28,8 @@ class MatcherConfig:
     threshold : float
     metric : str
     attributes : List[str]
-    candidates : Set
-    unique_ids : OrderedSet
+    candidates : np.array
+    unique_ids : np.array
 
 class Matcher(PPRLFeature):
     """Matcher class for pprl"""
@@ -50,25 +48,26 @@ class Matcher(PPRLFeature):
             threshold=threshold, metric=metric,
             attributes=attributes, candidates=None, unique_ids=None)
         self.execution_time : float = 0.0
-        self.encoded_data : BloomEncodedData
+        self.encoded_data : EncodedData
         self.ground_truth : pd.DataFrame
 
         # NOTE: OPENFHE
         # self.cc : CryptoContext
         # self.key_pair : KeyPair
 
+
     def update_graph(self, graph: tuple, threshold: float) -> tuple:
+        """Updates graph based on a new threshold"""
         self.matcher_config.threshold = threshold
-        edges_cpu, weights_cpu = graph
-        edges = cp.asarray(edges_cpu)
-        weights = cp.asarray(weights_cpu)
+        edges, weights = graph
         mask = self.matcher_config.threshold < weights
         edges = edges[mask]
         weights = weights[mask]
         return edges, weights
 
     def _candidates(self,
-            extract_candidates: Union[Dict[str, Block], EncodedData]) -> Tuple[set, OrderedSet]:
+            extract_candidates: Union[Dict[str, Block], EncodedData]) -> None:
+
 
         _, first_value = next(iter(extract_candidates.items()))
         if isinstance(first_value, Block):
@@ -130,7 +129,8 @@ class Matcher(PPRLFeature):
     def predict(self,
                 encoded_data: EncodedData,
                 blocks: Dict[str, Block] = None,
-                **kwargs) -> tuple:
+                # **kwargs
+                ) -> tuple:
         """
         Vectorized  similarity computation for Bloom filters or HE.
 
@@ -151,19 +151,16 @@ class Matcher(PPRLFeature):
             self.ground_truth = encoded_data.ground_truth
 
         if blocks:
-            self.matcher_config.candidates, self.matcher_config.unique_ids = \
-                self._candidates(blocks)
-        else:
-            self.matcher_config.candidates = self.matcher_config.unique_ids = None
+            self._candidates(blocks)
 
 
         if isinstance(encoded_data, BloomEncodedData):
             self._method_info = """Matching with Bloom Filters"""
-            return self._predict_from_bloom(encoded_data)
-
-        if isinstance(encoded_data, HomomorphicEcnodedData):
-            self._method_info = """Matching with Homomorhpic Encoded Data """
-            graph = self._predict_from_vector(encoded_data, **kwargs)
+            graph = self._predict_from_bloom(encoded_data)
+        elif isinstance(encoded_data, HomomorphicEcnodedData):
+            raise NotImplementedError("Homomorphic matching is not implemented yet.")
+            # self._method_info = """Matching with Homomorhpic Encoded Data """
+            # graph = self._predict_from_vector(encoded_data, **kwargs)
         else:
             raise TypeError(f"encoded_data must be of type: BloomEncodedData \
                 or HomomorphicEcnodedData, but its {type(encoded_data)}")
@@ -172,8 +169,7 @@ class Matcher(PPRLFeature):
         return graph
 
     # NOTE: OPENFHE
-    def _bgvs(self) -> None:
-        raise NotImplementedError("BGVS homomorphism is not implemented yet. ")
+    # def _bgvs(self) -> None:
     #     parameters = CCParamsBGVRNS()
     #     sigma = 3.2                       # palisade: sigma
     #     security_level = SecurityLevel.HEStd_128_classic
@@ -204,11 +200,11 @@ class Matcher(PPRLFeature):
             "attributes": self.matcher_config.attributes }
 
 
+    # NOTE: OPENFHE
     def _predict_from_vector(self, encoded_data: HomomorphicEcnodedData,
             type_of_match: Literal['overlap', 'extension'] = 'overlap',
             homomorphism : Literal['bgvs'] = 'bgvs' ) -> tuple:
-        raise NotImplementedError(
-            "Similarity computation for homomorphic encoded data is not implemented yet. ")
+        raise NotImplementedError("Homomorphic matching is not implemented yet.")
         # if homomorphism == 'bgvs':
         #     self._bgvs()
 
@@ -216,9 +212,9 @@ class Matcher(PPRLFeature):
         # matching_function = getattr(src.pprl.openfhe_similarity, matching_function)
 
         # attributes = self.matcher_config.attributes if self.matcher_config.attributes \
-        #     else encoded_data.attributes
+        #     else encoded_data.metadata.attributes
 
-        # # graph : Graph = Graph()
+        # graph : Graph = Graph()
 
         # homomorphic_dict = encoded_data.encoded_dict
 
@@ -236,9 +232,9 @@ class Matcher(PPRLFeature):
         # return graph
 
     def _predict_batches(self,
-            batch_pairs : cp.array,
-            bloom_matrix: cp.array,
-            unique_ids_arr: cp.array) -> List[Tuple[int, int, float]]:
+            batch_pairs : np.array,
+            bloom_matrix: np.array,
+            unique_ids_arr: np.array) -> List[Tuple[int, int, float]]:
 
         metrics_dict = {
             "dice" : _dice,
@@ -248,17 +244,18 @@ class Matcher(PPRLFeature):
         }
 
 
-        _metric = metrics_dict.get(self.matcher_config.metric, metrics_dict['dice'])
+        _metric = metrics_dict.get(self.matcher_config.metric,
+                            metrics_dict['dice'])
 
-        avg_similarities : cp.array = _metric(
-                cp.asarray(bloom_matrix[batch_pairs[:,0]]),
-                cp.asarray(bloom_matrix[batch_pairs[:,1]]))
+        avg_similarities : np.array = _metric(
+                bloom_matrix[batch_pairs[:,0]],
+                bloom_matrix[batch_pairs[:,1]])
 
         mask = avg_similarities >= self.matcher_config.threshold
-        if not cp.any(mask):
+
+        if not np.any(mask):
             return [], [], []
 
-        mask = mask.get()
         valid_pairs = batch_pairs[mask]
         valid_scores = avg_similarities[mask]
 
@@ -275,7 +272,7 @@ class Matcher(PPRLFeature):
 
         if self.matcher_config.unique_ids is None:
             bloom_filter_matrix = np.zeros((self.encoded_data.bounds[1],
-                                n_attrs, length), dtype=bool)
+                                n_attrs, length), dtype=np.bool)
 
             for entity_id, fields in self.encoded_data.encoded_dict.items():
                 for attr_idx, attr in enumerate(attributes):
@@ -304,46 +301,28 @@ class Matcher(PPRLFeature):
         return bloom_filter_matrix
 
     def _get_unique_ids(self) -> tuple:
-        id_to_idx = {eid: idx \
-                for idx, eid in enumerate(self.matcher_config.unique_ids)}
-        unique_ids_arr = np.array(self.matcher_config.unique_ids)
 
-        idx_pairs = np.array([(id_to_idx[eid1], id_to_idx[eid2])
-                        for eid1, eid2 in self.matcher_config.candidates])
-        n_candidates = len(idx_pairs)
+        sorter = np.argsort(self.matcher_config.unique_ids)
+
+        idx_pairs = sorter[
+            np.searchsorted(self.matcher_config.unique_ids,
+                    self.matcher_config.candidates, sorter=sorter)
+            ]
+        unique_ids_arr = self.matcher_config.unique_ids
+        n_candidates = idx_pairs.shape[0]
 
         return n_candidates, unique_ids_arr, idx_pairs
-    def _get_unique_ids_dense(self) -> tuple:
 
+    def _get_unique_ids_dense(self) -> tuple:
         unique_ids_arr = np.arange(0, self.encoded_data.bounds[1])
         ids_1 = self.encoded_data.bounds[0]
         ids_2 = self.encoded_data.bounds[1] - ids_1
         n_candidates = ids_1 * ids_2
-
         return n_candidates, unique_ids_arr
 
-    def _match_all_is_dense(self, n_candidates: int,
-            bloom_matrix: cp.array, unique_ids_arr: cp.array) -> tuple:
-
-        ids_2 = self.encoded_data.bounds[1] - self.encoded_data.bounds[0]
-        edges_list = []
-        edges_weights_list = []
-        for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
-                    desc="Predicting batches", position=1, leave=False):
-            end = min(start + self.matcher_config.batch_size, n_candidates)
-            batch_indices = np.arange(start, end)
-            rows, cols = np.divmod(batch_indices, ids_2)
-            cols += self.encoded_data.bounds[0]
-            src, tgt, weights = self._predict_batches(
-                np.column_stack((rows, cols)),
-                bloom_matrix, unique_ids_arr)
-            edges_list.append(np.column_stack((src, tgt)))
-            edges_weights_list.append(weights)
-        return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
-
     def _match_all(self, n_candidates: int,
-            bloom_matrix: cp.array, unique_ids_arr: cp.array,
-            idx_pairs: cp.array = None) -> tuple:
+        bloom_matrix: np.array, unique_ids_arr: np.array,
+        idx_pairs: np.array = None) -> tuple:
 
         edges_list = []
         edges_weights_list = []
@@ -355,9 +334,27 @@ class Matcher(PPRLFeature):
                                 bloom_matrix, unique_ids_arr)
             edges_list.append(np.column_stack((src, tgt)))
             edges_weights_list.append(weights)
+
         return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
+    def _match_all_is_dense(self, n_candidates: int,
+        bloom_matrix: np.array, unique_ids_arr: np.array) -> tuple:
 
+        edges_list = []
+        edges_weights_list = []
+        for start in tqdm(range(0, n_candidates, self.matcher_config.batch_size),
+                    desc="Predicting batches", position=1, leave=False):
+            end = min(start + self.matcher_config.batch_size, n_candidates)
+            batch_indices = np.arange(start, end)
+            rows, cols = np.divmod(batch_indices,
+                            self.encoded_data.bounds[1] - self.encoded_data.bounds[0])
+            cols += self.encoded_data.bounds[0]
+            batch_pairs = np.column_stack((rows, cols))
+            src, tgt, weights = self._predict_batches(batch_pairs,
+                                bloom_matrix, unique_ids_arr)
+            edges_list.append(np.column_stack((src, tgt)))
+            edges_weights_list.append(weights)
+        return np.concatenate(edges_list, axis=0), np.concatenate(edges_weights_list, axis=0)
 
     def _predict_from_bloom(self, encoded_data: BloomEncodedData) -> tuple:
 
@@ -367,37 +364,20 @@ class Matcher(PPRLFeature):
         n_candidates = 0
         bloom_matrix = self._predict_create_bloom_matrix(attributes, encoded_data)
 
+
         if self.matcher_config.unique_ids is not None:
             n_candidates, unique_ids_arr, idx_pairs = self._get_unique_ids()
             return self._match_all(n_candidates, bloom_matrix, unique_ids_arr, idx_pairs)
 
-
         n_candidates, unique_ids_arr = self._get_unique_ids_dense()
-        return self._match_all_is_dense(
-            n_candidates, bloom_matrix, unique_ids_arr)
-
-
-    def _evaluate_unique_ids(self,id1_arr: cp.array, id2_arr: cp.array) -> tuple:
-        unique_ids_gpu = cp.array(self.matcher_config.unique_ids)
-        sort_order = cp.argsort(unique_ids_gpu)
-        sorted_keys = unique_ids_gpu[sort_order]
-        sorted_vals =cp.arange(len(unique_ids_gpu))[sort_order]
-        def map_ids_to_indices(arr, keys, vals):
-            idx = cp.searchsorted(keys, arr)
-            idx = cp.clip(idx, 0, len(keys)- 1)
-            found_mask = keys[idx] == arr
-            return cp.where(found_mask, vals[idx], arr)
-
-        id1_arr = map_ids_to_indices(id1_arr, sorted_keys, sorted_vals).get()
-        id2_arr = map_ids_to_indices(id2_arr, sorted_keys, sorted_vals).get()
-        return id1_arr, id2_arr
+        return self._match_all_is_dense(n_candidates, bloom_matrix, unique_ids_arr)
 
 
     def evaluate(self,
-            prediction : np.array,
-            export_to_df: bool = False,
-            with_classification_report: bool = False,
-            verbose: bool = True) -> any:
+                prediction : np.array,
+                export_to_df: bool = False,
+                with_classification_report: bool = False,
+                verbose: bool = True) -> any:
 
         if self.encoded_data is None:
             raise AttributeError("Can not proceed to evaluation without data object.")
@@ -406,25 +386,31 @@ class Matcher(PPRLFeature):
             raise AttributeError("Can not proceed to evaluation without a ground-truth file. " +
                     "Encoded Data object the ground-truth file has not been set.")
         edges, _ = prediction
+
+        edges = edges.astype(np.int32)
         eval_obj = Evaluation(self.encoded_data)
 
-        id1_arr = cp.asarray(self.encoded_data.ground_truth.iloc[:, 0].values)
 
-        id2_arr = cp.asarray(self.encoded_data.ground_truth.iloc[:, 1].values) \
-            + self.encoded_data.bounds[0]
+        id1_arr = self.encoded_data.ground_truth.iloc[:, 0].values
+        offset = self.encoded_data.bounds[0]
 
+        id2_arr = (self.encoded_data.ground_truth.iloc[:, 1].values + offset)
 
-        def pack_edges_direct(u,v):
-            return u.astype(np.uint64) << 32 | v.astype(np.uint64)
+        # if self.matcher_config.unique_ids:
+        #     id_to_idx = {eid: idx \
+        #         for idx, eid in enumerate(self.matcher_config.unique_ids)}
+        #     replace_func = np.vectorize(lambda x: id_to_idx.get(x, x))
+        #     id1_arr = replace_func(id1_arr)
+        #     id2_arr = replace_func(id2_arr)
 
-        gt_hashes = pack_edges_direct(id1_arr, id2_arr)
-        edge_hashes = pack_edges_direct(edges[:, 0], edges[:, 1])
+        gt_pairs = np.column_stack((id1_arr, id2_arr)).astype(np.int32)
 
-        matches = np.intersect1d(cp.asnumpy(edge_hashes), cp.asnumpy(gt_hashes))
+        def as_void(arr):
+            return arr.view(np.dtype((np.void, arr.dtype.itemsize * arr.shape[1])))
+        matches = np.intersect1d(as_void(edges), as_void(gt_pairs))
 
         eval_obj.calculate_scores(true_positives=matches.shape[0],
                                   total_matching_pairs=edges.shape[0])
-
         return eval_obj.report(self.method_configuration(),
                                 export_to_df,
                                 with_classification_report,

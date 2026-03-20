@@ -12,9 +12,9 @@ import ray
 from bitarray import bitarray
 import numpy as np
 
-from pprl.utils import  are_matching
-from pprl.evaluation import Evaluation
-from pprl.datamodel import EncodedData, PPRLFeature
+from privjedai.utils import  are_matching
+from privjedai.evaluation import Evaluation
+from privjedai.datamodel import EncodedData, PPRLFeature
 
 @dataclass
 class BloomEncodedDataMetadata:

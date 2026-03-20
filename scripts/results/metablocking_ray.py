@@ -7,7 +7,7 @@ from tqdm import tqdm
 import ray
 from utils import load_dataframe, config_bloom_filter, comparison_cleaning_exp
 
-from pprl.comparison_cleaning import (
+from privjedai.comparison_cleaning import (
     WeightedEdgePruning,
     WeightedNodePruning,
     CardinalityEdgePruning,

@@ -1,17 +1,19 @@
 """Evaluation module
 This file contains all the methods for evaluating every module in pyjedai.
 """
+import cupy as cp
 from typing import List, Tuple, Dict
 from warnings import warn
 import random
 from dataclasses import dataclass, field
+
+
 import matplotlib.pyplot as plt
 import pandas as pd
 import seaborn as sns
-import numpy as np
 
-from pprl.datamodel import Block, EncodedData
-from pprl.utils import batch_pairs
+from privjedai.datamodel import Block, EncodedData
+from privjedai.utils import PredictionData, generate_unique_identifier, batch_pairs
 
 @dataclass
 class Metrics:
@@ -185,9 +187,45 @@ class Evaluation:
         return results_dict
 
 
+    def _create_entity_index_from_clusters_gpu(
+            self,
+            clusters: list
+    ) -> dict:
+        """
+        Docstring for _create_entity_index_from_clusters_gpu
+
+        :param self: Description
+        :param clusters: Description
+        :type clusters: list
+        :return: Description
+        :rtype: dict
+        """
+
+        _limit = self.encoded_data.bounds[0]
+        _d2_limit = self.encoded_data.bounds[1]
+        # print(clusters)
+        # all_gt_ids: set = set(range(_d2_limit))
+        entity_index = cp.full(_d2_limit, -1, dtype=cp.int32)
+
+        if not clusters:
+            return entity_index
+
+
+        cluster_lens = [len(c) for c in clusters]
+        cluster_ids_flat = cp.repeat(cp.arange(len(clusters)), cluster_lens)
+        entities_flat = cp.concatenate([cp.array(list(c)) for c in clusters])
+        is_d1 = entities_flat < _limit
+        d1_counts = cp.bincount(cluster_ids_flat, weights=is_d1, minlength=len(clusters))
+        d2_counts = cp.array(cluster_lens) - d1_counts
+        self.cm.total_matching_pairs += int(cp.sum(d1_counts * d2_counts))
+        entity_index[entities_flat] = cluster_ids_flat
+
+        return entity_index
+
     def create_entity_index_from_clusters(
             self,
             clusters: list,
+            gpu: bool = False
     ) -> dict:
         """
         Docstring for create_entity_index_from_clusters
@@ -199,6 +237,8 @@ class Evaluation:
         :rtype: dict
         """
 
+        if gpu:
+            return self._create_entity_index_from_clusters_gpu(clusters)
         _limit = self.encoded_data.bounds[0]
         _d2_limit = self.encoded_data.bounds[1]
         # print(clusters)
@@ -495,3 +535,74 @@ class Evaluation:
 
         return _recall_axis, _normalized_auc
 
+
+    def visualize_results_roc(self, results : dict, drop_tp_indices=True) -> None:
+        """For each of the executed workflows,
+        calculates the cumulative recall and normalized AUC based upon true positive indices.
+        Finally, displays the ROC for all of the workflows
+        with proper annotation (each workflow gains a unique identifier).
+
+        Args:
+            results (dict): Nested dictionary of the form [dataset]
+                -> [matcher] -> [executed workflows and their info] / [model] -> [executed -//-]
+        """
+
+        workflows_info : List[Tuple[dict]] = []
+
+        for dataset in results:
+            matchers = results[dataset]
+            for matcher in matchers:
+                matcher_info = matchers[matcher]
+                if isinstance(matcher_info, list):
+                    for workflow_info in matcher_info:
+                        workflows_info.append((workflow_info))
+                else:
+                    for model in matcher_info:
+                        for workflow_info in matcher_info[model]:
+                            workflows_info.append((workflow_info))
+
+        self.visualize_roc(workflows_info, drop_tp_indices=drop_tp_indices)
+
+
+    def evaluate_auc_roc(self, matchers : List,
+            drop_tp_indices=True) -> None:
+        """For each matcher,
+        takes its prediction data,
+        calculates cumulative recall and auc,
+        plots the corresponding ROC curve,
+        populates prediction data with performance info
+
+        Args:
+            matchers List[ProgressiveMatching]: Progressive Matchers
+
+        Raises:
+            AttributeError: No Data object
+            AttributeError: No Ground Truth file
+        """
+
+        if self.encoded_data is None:
+            raise AttributeError("Can not proceed to AUC ROC evaluation without data object.")
+
+        if self.encoded_data.skip_ground_truth:
+            raise AttributeError("Can not proceed to AUC ROC" \
+            " evaluation without a ground-truth file. " +
+            "Data object has not been initialized with the ground-truth file")
+
+        self.matchers_info = []
+
+        for matcher in matchers:
+            _tp_indices, _total_emissions  = self.calculate_tps_indices(pairs=matcher.pairs,
+                                                duplicate_of=matcher.duplicate_of,
+                                                duplicate_emitted=matcher.duplicate_emitted)
+            matcher_info = {}
+            matcher_info['name'] = generate_unique_identifier()
+            matcher_info['total_emissions'] = _total_emissions
+            matcher_info['tp_idx'] = _tp_indices
+            matcher_info['time'] = matcher.execution_time
+
+            matcher_prediction_data : PredictionData = PredictionData(matcher=matcher,
+                                                            matcher_info=matcher_info)
+            matcher.set_prediction_data(matcher_prediction_data)
+            self.matchers_info.append(matcher_info)
+
+        self.visualize_roc(methods_data=self.matchers_info, drop_tp_indices=drop_tp_indices)

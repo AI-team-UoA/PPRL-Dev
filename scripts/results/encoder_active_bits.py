@@ -5,7 +5,7 @@ import pandas as pd
 import ray
 import logging
 
-from pprl.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
+from privjedai.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 
 from utils import load_dataframe, candidate_pairs_and_active_bits_ray, config_bloom_filter, evaluate_encoder_ray
 

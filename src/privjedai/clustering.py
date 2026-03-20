@@ -8,9 +8,9 @@ from typing import Dict, List, Tuple
 from scipy.sparse import csr_matrix
 from scipy.sparse.csgraph import connected_components
 import numpy as np
-from pprl.encoded_data import BloomEncodedData
-from pprl.base_clustering import AbstractClustering
-from pprl.numba.clustering import *
+from privjedai.encoded_data import BloomEncodedData
+from privjedai.base_clustering import AbstractClustering
+from privjedai.numba.clustering import *
 
 RANDOM_SEED = 42
 

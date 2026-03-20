@@ -8,14 +8,14 @@ from math import log10, sqrt
 import numpy as np
 from scipy.sparse import csr_matrix, diags, coo_matrix
 
-from pprl.clustering import (
+from privjedai.clustering import (
     ConnectedComponentsClustering,
     KiralyMSMApproximateClustering,
     UniqueMappingClustering
 )
-from pprl.ray.matching import Matcher
+from privjedai.ray.matching import Matcher
 
-from pprl.comparison_cleaning import (
+from privjedai.comparison_cleaning import (
     CardinalityEdgePruning,
     CardinalityNodePruning,
     WeightedNodePruning,

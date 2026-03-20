@@ -12,8 +12,8 @@ from tqdm.autonotebook import tqdm
 from ordered_set import OrderedSet
 import numpy as np
 from scipy.sparse import lil_matrix
-from pprl.datamodel import PPRLFeature
-from pprl.encoded_data import BloomEncodedData
+from privjedai.datamodel import PPRLFeature
+from privjedai.encoded_data import BloomEncodedData
 
 RANDOM_SEED = 42
 
