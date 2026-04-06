@@ -32,17 +32,17 @@ import ast
 
 if __name__ == '__main__':
 
-    DIR = "D4"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'acmclean'
-    attributes = [['title']]
-    SEP = '%'
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
+    attributes = [['title', 'starring']]
+    SEP = '|'
 
 
     RESULTS = f"results/blocking_new/{DIR}"
 
-    size = [64, 128, 256, 512, 1024]
+    size = [64 // 2, 128 // 2, 256 // 2, 512 // 2, 1024 // 2]
     qgrams = [2, 3, 4]
     TOTAL_LENGTH = 266
 
