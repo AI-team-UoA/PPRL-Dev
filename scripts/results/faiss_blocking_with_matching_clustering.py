@@ -18,7 +18,7 @@ if __name__ == '__main__':
     PATH = f"data/ccer/{DIR}"
     FILE = 'abtclean'
     FILE2 = 'buyclean'
-    attributes = ['name']
+    attributes = [['name']]
     SEP = "|"
 
     RESULTS = f"results/faiss/{DIR}"
@@ -34,43 +34,37 @@ if __name__ == '__main__':
             f"{RESULTS}/clustering/{faiss_mode}"
         ).mkdir(parents=True, exist_ok=True)
 
-    size = 1024
-    qgrams = 4
-    TOTAL_LENGTH = 32
+    size = [64, 128, 256, 512, 1024]
+    qgrams = [2, 3, 4]
+    TOTAL_LENGTH = 266
     kiraly = KiralyMSMApproximateClustering()
     connected = ConnectedComponentsClustering()
     unique = UniqueMappingClustering()
 
+    for configuration, new_bloom in tqdm(
+            config_bloom_filter(attributes,
+                        size, qgrams,
+                        BLOOM_NAME,
+                        loaded_dataframe,
+                        {}),
+            desc = "Blooms Generator",
+            position=0, leave=True):
 
-    for num_hashes in tqdm(range(1, 33), total=TOTAL_LENGTH,
-                position=0, desc="Total Progress", leave=True):
-
-        configuration = {'attributes': attributes,
-            'size': size,
-            'offset': 0,
-            'num_hashes': num_hashes,
-            'hashing_type': 'salted_qgrams',
-            'salt': '',
-            'qgrams': qgrams
-        }
-
-        new_bloom = config_bloom_filter_with_configuration(configuration,
-                            BLOOM_NAME, loaded_dataframe)
         for faiss_mode in ['flat', 'hnsw', 'lsh']:
             faiss_blocking = FAISSBlocking(faiss_mode)
             matcher = None
-            for k in tqdm(range(10), desc=f"{faiss_mode.upper()} Top-K",
+            for k in tqdm(range(10,101, 10), desc=f"{faiss_mode.upper()} Top-K",
                           position=1, leave=False,
                           total=10):
 
-                blocks = faiss_blocking.build_blocks(new_bloom, top_k=k+1)
+                blocks = faiss_blocking.build_blocks(new_bloom, top_k=k)
                 ev : dict = faiss_blocking.evaluate(blocks, verbose = False)
 
                 candidate_pairs = 0
                 for val in blocks.values():
                     candidate_pairs += len(val)
                 faiss_evaluation = {'name': f'FAISS {faiss_mode.upper()} Blocking',
-                        'candidate_pairs': candidate_pairs, 'top_k': k+1}
+                        'candidate_pairs': candidate_pairs, 'top_k': k}
                 for keys, items in ev.items():
                     faiss_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
                 faiss_evaluation['config'] = configuration
@@ -80,6 +74,7 @@ if __name__ == '__main__':
                 loaded = os.path.exists(f"{RESULTS}/{filename}")
                 df.to_csv(f'{RESULTS}/{filename}', mode='a+', index=False, header=not loaded)
                 for metric in ['cosine', 'dice', 'jaccard']:
+                    matcher = None
                     for similarity in tqdm(
                         range(5,100,5), leave=False, position=2,
                         desc=f"Matching Similarity {metric}", total=19):
@@ -117,7 +112,7 @@ if __name__ == '__main__':
                                 'total_clusters': len(clusters),
                                 'threshold': thr,
                                 'matcher': metric,
-                                'top_k': k+1
+                                'top_k': k
                             }
                             for keys, items in ev_cl.items():
                                 cluster_ev[keys] = round(items, 2) if isinstance(items, float) else items
