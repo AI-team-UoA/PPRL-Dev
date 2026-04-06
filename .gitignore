@@ -22,3 +22,4 @@ src/privjedai.egg-info/SOURCES.txt
 src/privjedai.egg-info/top_level.txt
 .coverage
 2
+/.idea
