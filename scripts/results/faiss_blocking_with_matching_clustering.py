@@ -40,12 +40,12 @@ def evaluate_faiss(f_mode,
 
 if __name__ == '__main__':
 
-    DIR = "D3"
+    DIR = "D8"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'amazonclean'
-    FILE2 = 'gpclean'
+    FILE = 'walmartclean'
+    FILE2 = 'amazonclean'
     attributes = [['title']]
-    SEP = "#"
+    SEP = "|"
 
     VALID_FAISS_MDOES: List[Literal['flat', 'hnsw', 'multihash']] = ['flat', 'hnsw', 'multihash']
 
