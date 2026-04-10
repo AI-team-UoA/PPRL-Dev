@@ -1,7 +1,7 @@
 """FAISS Results """
 
 import os
-
+import sys
 from typing import Literal, List, Dict
 import pandas as pd
 from tqdm import tqdm
@@ -40,21 +40,38 @@ def evaluate_faiss(f_mode,
 
 if __name__ == '__main__':
 
-    DIR = "D8"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
-    attributes = [['title']]
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
+    attributes = [['title', 'starring']]
     SEP = "|"
 
     VALID_FAISS_MDOES: List[Literal['flat', 'hnsw', 'multihash']] = ['flat', 'hnsw', 'multihash']
+
+    log_filename = f"{DIR}.log"
+
+    # 3. Open the log file and redirect stdout and stderr
+    # Using 'a' appends to the file. Use 'w' if you want to overwrite it each time.
+    log_file = open(log_filename, 'a')
+
+    # Flush existing output before redirecting
+    sys.stdout.flush()
+    sys.stderr.flush()
+
+    # Map standard output and standard error to your custom file
+    sys.stdout = log_file
+    sys.stderr = log_file
+
+    # --- Your script logic starts here ---
+    print(f"Script started. Logging everything to {log_filename}")
 
     RESULTS = f"results/faiss/{DIR}"
     loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
     BLOOM_NAME = 'faiss'
     print(f"Running FAISS for {DIR}")
 
-    size = [64, 128, 256, 512, 1024]
+    size = [64 // 2, 128 // 2, 256 // 2, 512 // 2, 1024 // 2]
     qgrams = [2, 3, 4]
     TOTAL_LENGTH = 266
 
