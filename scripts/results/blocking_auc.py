@@ -1,7 +1,7 @@
 import os
 import sys
 import math
-
+import time
 from typing import Dict
 from tqdm import tqdm
 import pandas as pd
@@ -84,6 +84,8 @@ def comparison_cleaning_loop(encoded_data: BloomEncodedData,
                    CardinalityEdgePruning,
                    BLAST]:
 
+        start_time = time.time()
+
         cc = method(weighting_scheme = "CN-CBS")
         one_comparison_cleaning_loop(encoded_data,
                          blocking_config_,
@@ -92,15 +94,16 @@ def comparison_cleaning_loop(encoded_data: BloomEncodedData,
                          encoding_config,
                          meta_blocking_results_,
                          cc)
-
+        end_time = time.time()
+        print(f"Comparison cleaning evaluation for {method.__name__} with weighting scheme CN-CBS took {round(end_time - start_time, 2)} seconds.")
 
 if __name__ == '__main__':
-    DIR = "D8"
+    DIR = "D9"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'walmartclean'
-    FILE2 = 'amazonclean'
+    FILE = 'dblpclean'
+    FILE2 = 'scholarclean'
     attributes = [['title']]
-    SEP = "|"
+    SEP = ">"
 
     # log_filename = f"{DIR}.log"
     #
@@ -129,6 +132,7 @@ if __name__ == '__main__':
     probabilities = [0.75, 0.85, 0.95]
 
     evaluations = []
+    i = 0
     for configuration, new_bloom in tqdm(
             config_bloom_filter(
                 attributes,
@@ -143,10 +147,16 @@ if __name__ == '__main__':
             total=TOTAL_LENGTH):
         bloom_size = new_bloom.metadata.length
         attr_len = len(attributes) if attributes else len(new_bloom.metadata.attributes)
+        if i  < 33:
+            i += 1
+            continue
+
 
         for threshold in range(10, 55, 5):
             thr = threshold / 100
             distance_thr = int(thr * bloom_size * attr_len)
+            
+            start_time = time.time()
             bit_blocker_config = BitBlocker.auto_psi_lambda(new_bloom, attributes, thr)
             # max_lambda_=1_000)
 
@@ -154,7 +164,12 @@ if __name__ == '__main__':
             lambda_ = bit_blocker_config['lambda_']
             blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=42)
             blocks = blocker.build_blocks(new_bloom)
+            
+
+
             ev = blocker.evaluate_blocks(verbose=False)
+            end_time = time.time()
+            print(f"Blocking evaluation for {configuration} with distance threshold {distance_thr} took {round(end_time - start_time, 2)} seconds.")
 
             blocking_config = {
                 "psi" : psi,
@@ -179,9 +194,12 @@ if __name__ == '__main__':
             df.to_csv(f'{RESULTS}/{filename}', mode='a+', index=False, header=not loaded)
 
             bf = BlockFiltering()
+            start_time = time.time()
+
             filtered_blocks = bf.process(new_bloom)
             ev_filtered = bf.evaluate_blocks(verbose=False)
-
+            end_time = time.time()
+            print(f"Filtering evaluation for {configuration} with distance threshold {distance_thr} took {round(end_time - start_time, 2)} seconds.")
             filename = "block_filtering.csv"
 
             filtering_evaluation: Dict[str, float | str | int | dict] = {
@@ -198,6 +216,8 @@ if __name__ == '__main__':
             loaded = os.path.exists(f"{RESULTS_FILTERING}/{filename}")
             df.to_csv(f'{RESULTS_FILTERING}/{filename}', mode='a+', index=False, header=not loaded)
 
+            
+            
             comparison_cleaning_loop(
                 new_bloom,
                 blocking_config,
@@ -208,10 +228,14 @@ if __name__ == '__main__':
 
             new_bloom.set_blocks_with_keys(blocker.blocks_with_keys)
 
+
+            start_time = time.time()
             bp = BlockPurging(smoothing_factor=0.9)
             purged_blocks = bp.process(new_bloom)
             ev_purged = bp.evaluate_blocks(verbose=False)
 
+            end_time = time.time()
+            print(f"Purging evaluation for {configuration} with distance threshold {distance_thr} took {round(end_time - start_time, 2)} seconds.")
             filename = "block_purging.csv"
 
             purging_evaluation: Dict[str, float | str | int | dict] = {
