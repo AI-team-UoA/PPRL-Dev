@@ -11,6 +11,7 @@ src/pprl.egg-info/
 /results/testing/__pycache__
 /.vscode
 /scripts/results/__pycache__
+/src/
 /src/__pycache__
 /primat/__pycache__
 /privjedai_toolkit

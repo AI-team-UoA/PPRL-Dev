@@ -1,0 +1,2 @@
+name,runtime,candidate_pairs,psi,lambda,distance_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+LSH-Blocking,29.74,104004076,9,134,102,0.0,100.0,0.0,2304,104001772,61522,0,"{'attributes': ['title'], 'size': 256, 'offset': 0, 'num_hashes': 6, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
