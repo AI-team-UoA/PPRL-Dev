@@ -1,5 +1,5 @@
 """Random Blocking Experimental Analysis Script"""
-
+import math
 import os
 import random
 import time
@@ -13,12 +13,12 @@ from privjedai.blocking import  BitBlocker
 
 if __name__ == '__main__':
 
-    DIR = "D9"
+    DIR = "D10"
     PATH = f"data/ccer/{DIR}"
-    FILE = 'dblpclean'
-    FILE2 = 'scholarclean'
-    attributes = ['title']
-    SEP = ">"
+    FILE = 'imdbclean'
+    FILE2 = 'dbpediaclean'
+    attributes = ['title', 'starring']
+    SEP = "|"
 
     RESULTS = f"results/random_configurations/lsh_blocker/{DIR}"
 
@@ -27,7 +27,8 @@ if __name__ == '__main__':
 
     print(f"Running LSH for {DIR}")
 
-    size = [64, 128, 256, 512, 1024]
+    size = [64 // 2, 128 // 2, 256 // 2, 512 // 2, 1024 // 2]
+
     q_grams = [2, 3, 4]
 
     TOTAL_LENGTH = 100
@@ -41,7 +42,12 @@ if __name__ == '__main__':
         s = random.choice(size)
         q = random.choice(q_grams)
 
-        n_hashes = random.randrange(1, s//(8*q), 1)
+        end_range = s // (8 * q)
+
+        if end_range == 1:
+            n_hashes = 1
+        else:
+            n_hashes = random.randrange(1,end_range, 1)
 
         configuration = {
             'attributes': attributes,

@@ -40,9 +40,8 @@ def load_dataframe(path: str, files: tuple, sep: str):
     gt_index = gt_index.drop(columns=['id', 'D2'])
     gt_index.columns = ['D1', 'D2']
 
-
-    d1 = d1.astype(str)
-    d2 = d2.astype(str)
+    d1 = d1.fillna('').astype(str)
+    d2 = d2.fillna('').astype('str')
 
 
     return d1, d2, gt_index
@@ -54,6 +53,7 @@ def config_bloom_filter_with_configuration(configuration: dict,
 
     config = BloomFilterConfig(**configuration)
     bl = BloomFilter(config)
+
     bloom_filters : BloomEncodedData = bl.encode(loaded_dataframe[0])
     bloom_filters.to_file(f'{bloom_name}_1.pkl')
 
