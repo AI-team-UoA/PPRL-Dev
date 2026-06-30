@@ -16,6 +16,15 @@ from privjedai.encoder import BloomFilterConfig, BloomEncodedData, BloomFilter
 from privjedai.clustering import AbstractClustering, UniqueMappingClustering, \
     ConnectedComponentsClustering, KiralyMSMApproximateClustering
 
+dataframe_dict = {
+    'D2': ("abtclean", "buyclean", ["name"], "|"),
+    'D3': ("amazonclean", "gpclean", ["title"], "#"),
+    'D4': ("dblpclean", "acmclean", ["title"], "%"),
+    'D8': ("walmartclean", "amazonclean", ["title"], "|"),
+    'D9': ("dblpclean", "scholarclean", ["title"], ">"),
+    'D10': ("imdbclean", "dbpediaclean", ["title","starring"], "|")
+}
+
 def load_dataframe(path: str, files: tuple, sep: str):
     """Loads Dataframe"""
 
