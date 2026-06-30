@@ -17,6 +17,7 @@ src/pprl.egg-info/
 /privjedai_toolkit
 *.pkl
 *.log
+*.out
 src/privjedai.egg-info/dependency_links.txt
 src/privjedai.egg-info/PKG-INFO
 src/privjedai.egg-info/SOURCES.txt

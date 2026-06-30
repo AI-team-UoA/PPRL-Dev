@@ -27,7 +27,7 @@ if __name__ == '__main__':
 
     print(f"Running LSH for {DIR}")
 
-    size = [64 // 2, 128 // 2, 256 // 2, 512 // 2, 1024 // 2]
+    size = [64, 128, 256, 512, 10242]
 
     q_grams = [2, 3, 4]
 
