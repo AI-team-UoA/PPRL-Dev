@@ -101,14 +101,14 @@ if __name__ == '__main__':
             }
 
             start_time = time.time()
-            cc = WeightedNodePruning(weighting_scheme='CN-CBS')
+            cc = WeightedEdgePruning(weighting_scheme='CN-CBS')
             blocks = cc.process(new_bloom)
             ev = cc.evaluate(blocks, verbose=False)
             end_time = time.time()
 
 
             comparison_evaluation: Dict[str, float | str | int | dict] = {
-                "name": "Weighted Node Pruning",
+                "name": "Weighted Edge Pruning",
                 "weighting_scheme": 'CN-CBS',
                 "runtime": round(end_time - start_time, 2),
                 "candidate_pairs": int(ev['False Positives']) + int(ev['True Positives']),
@@ -122,8 +122,8 @@ if __name__ == '__main__':
             comparison_evaluation['config'] = configuration
 
             df = pd.DataFrame([comparison_evaluation])
-            loaded = os.path.exists(f"{RESULTS}/WeightedNodePruning.csv")
-            df.to_csv(f'{RESULTS}/WeightedNodePruning.csv',
+            loaded = os.path.exists(f"{RESULTS}/WeightedEdgePruning.csv")
+            df.to_csv(f'{RESULTS}/WeightedEdgePruning.csv',
                       mode='a+',
                       index=False,
                       header=not loaded)
