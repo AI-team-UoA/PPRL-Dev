@@ -9,6 +9,12 @@ import pandas as pd
 from utils import load_dataframe, config_bloom_filter_with_configuration, dataframe_dict
 from privjedai.blocking import  BitBlocker
 from privjedai.block_filtering import BlockFiltering
+from privjedai.comparison_cleaning import ( BLAST,
+                                    WeightedEdgePruning,
+                                    WeightedNodePruning,
+                                    CardinalityEdgePruning,
+                                    CardinalityNodePruning,
+                                )
 
 
 if __name__ == '__main__':
@@ -19,7 +25,7 @@ if __name__ == '__main__':
         PATH = f"data/ccer/{DIR}"
 
         FILE, FILE2, attributes, SEP = dataframe_dict[DIR]
-        RESULTS = f"results/random_configurations/filtering/{DIR}"
+        RESULTS = f"results/random_configurations/metablocking/{DIR}"
 
         loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
         BLOOM_NAME = 'filtering'
@@ -60,64 +66,64 @@ if __name__ == '__main__':
                 'qgrams': q
             }
 
-            # new_bloom = config_bloom_filter_with_configuration(configuration=configuration,
-            #                                                 bloom_name=BLOOM_NAME,
-            #                                                 loaded_dataframe=loaded_dataframe)
+            new_bloom = config_bloom_filter_with_configuration(configuration=configuration,
+                                                            bloom_name=BLOOM_NAME,
+                                                            loaded_dataframe=loaded_dataframe)
 
 
             threshold  = random.randrange(10, 55, 10)
-            # thr = threshold / 100
-            # distance_thr = int(thr * s * len(attributes))
-            # bit_blocker_config = BitBlocker.auto_psi_lambda(new_bloom, attributes, thr)
-            # psi = bit_blocker_config['psi']
-            # lambda_ = bit_blocker_config['lambda_']
-            #
-            # lsh_blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=42)
-            # _ = lsh_blocker.build_blocks(new_bloom)
+            thr = threshold / 100
+            distance_thr = int(thr * s * len(attributes))
+            bit_blocker_config = BitBlocker.auto_psi_lambda(new_bloom, attributes, thr)
+            psi = bit_blocker_config['psi']
+            lambda_ = bit_blocker_config['lambda_']
+
+            lsh_blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=42)
+            _ = lsh_blocker.build_blocks(new_bloom)
 
 
             ratio = random.randrange(20, 90, 10)
 
             ratio = ratio / 100
             ratios.append(ratio)
-            continue
 
-        df = pd.read_csv(f"{RESULTS}/block_filtering.csv")
-        df.insert(1, 'ratio', ratios)
-        df.to_csv(f'{RESULTS}/block_filtering.csv',
-                  index=False,
-                  mode='w+')
+            filtering = BlockFiltering(ratio=ratio)
+            _ = filtering.process(new_bloom)
 
-            # start_time = time.time()
-            #
-            #
-            # filtering = BlockPurging(smoothing_factor=0.9)
-            # _ = filtering.process(new_bloom)
-            #
-            # ev = filtering.evaluate_blocks(verbose=False)
-            # end_time = time.time()
-            #
-            # blocking_config = {
-            #     "psi": psi,
-            #     "lambda": lambda_,
-            #     "distance_threshold": distance_thr
-            # }
-            # filtering_evaluation: Dict[str, float | str | int | dict] = {
-            #     "name": "Block Purging",
-            #     "smoothing_factor": 0.9,
-            #     "runtime": round(end_time - start_time, 2),
-            #     "candidate_pairs": int(ev['False Positives']) + int(ev['True Positives']),
-            #     "lsh_config": blocking_config,
-            # }
-            #
-            # for keys, items in ev.items():
-            #     filtering_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
-            #
-            # filtering_evaluation['config'] = configuration
-            #
-            # df = pd.DataFrame([filtering_evaluation])
-            # loaded = os.path.exists(f"{RESULTS}/block_purging.csv")
-            # df.to_csv(f'{RESULTS}/block_purging.csv',
-            #           mode='a+',
-            #           index=False,
-            #           header=not loaded)
+            blocking_config = {
+                "psi": psi,
+                "lambda": lambda_,
+                "distance_threshold": distance_thr
+            }
+            filtering_config = {
+                "method": "Block Filtering",
+                "ratio": ratio
+            }
+
+            start_time = time.time()
+            cc = WeightedNodePruning(weighting_scheme='CN-CBS')
+            blocks = cc.process(new_bloom)
+            ev = cc.evaluate(blocks, verbose=False)
+            end_time = time.time()
+
+
+            comparison_evaluation: Dict[str, float | str | int | dict] = {
+                "name": "Weighted Node Pruning",
+                "weighting_scheme": 'CN-CBS',
+                "runtime": round(end_time - start_time, 2),
+                "candidate_pairs": int(ev['False Positives']) + int(ev['True Positives']),
+                "lsh_config": blocking_config,
+                "filtering_config": filtering_config,
+                }
+
+            for keys, items in ev.items():
+                comparison_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+
+            comparison_evaluation['config'] = configuration
+
+            df = pd.DataFrame([comparison_evaluation])
+            loaded = os.path.exists(f"{RESULTS}/WeightedNodePruning.csv")
+            df.to_csv(f'{RESULTS}/WeightedNodePruning.csv',
+                      mode='a+',
+                      index=False,
+                      header=not loaded)
