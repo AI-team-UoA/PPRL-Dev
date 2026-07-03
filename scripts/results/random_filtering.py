@@ -8,7 +8,7 @@ import pandas as pd
 
 from utils import load_dataframe, config_bloom_filter_with_configuration, dataframe_dict
 from privjedai.blocking import  BitBlocker
-from privjedai.block_filtering import BlockFiltering
+from privjedai.block_filtering import BlockPurging
 from privjedai.encoded_data import BloomEncodedData
 from privjedai.comparison_cleaning import ( BLAST,
                                     WeightedEdgePruning,
@@ -29,7 +29,7 @@ if __name__ == '__main__':
         RESULTS = f"results/random_configurations/metablocking/{DIR}"
 
         loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
-        BLOOM_NAME = 'filtering'
+        BLOOM_NAME = 'purging'
 
         print(f"Running purging for {DIR}")
 
@@ -83,12 +83,12 @@ if __name__ == '__main__':
             _ = lsh_blocker.build_blocks(new_bloom)
 
 
-            ratio = random.randrange(20, 90, 10)
+            # ratio = random.randrange(20, 90, 10)
 
-            ratio = ratio / 100
-            ratios.append(ratio)
+            # ratio = ratio / 100
+            # ratios.append(ratio)
 
-            filtering = BlockFiltering(ratio=ratio)
+            filtering = BlockPurging(smoothing_factor=0.9)
             _ = filtering.process(new_bloom)
 
             blocking_config = {
@@ -97,12 +97,12 @@ if __name__ == '__main__':
                 "distance_threshold": distance_thr
             }
             filtering_config = {
-                "method": "Block Filtering",
-                "ratio": ratio
+                "method": "Block Purging",
+                "smoothing_factor": 0.9
             }
 
             prev_keys = new_bloom.blocks_with_keys.copy()
-            for cc_class in [ CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
+            for cc_class in [ WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
                 new_bloom.blocks_with_keys = prev_keys.copy()
                 start_time = time.time()
                 cc = cc_class(weighting_scheme='CN-CBS')
