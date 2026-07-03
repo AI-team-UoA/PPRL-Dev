@@ -9,6 +9,7 @@ import pandas as pd
 from utils import load_dataframe, config_bloom_filter_with_configuration, dataframe_dict
 from privjedai.blocking import  BitBlocker
 from privjedai.block_filtering import BlockFiltering
+from privjedai.encoded_data import BloomEncodedData
 from privjedai.comparison_cleaning import ( BLAST,
                                     WeightedEdgePruning,
                                     WeightedNodePruning,
@@ -66,7 +67,7 @@ if __name__ == '__main__':
                 'qgrams': q
             }
 
-            new_bloom = config_bloom_filter_with_configuration(configuration=configuration,
+            new_bloom : BloomEncodedData = config_bloom_filter_with_configuration(configuration=configuration,
                                                             bloom_name=BLOOM_NAME,
                                                             loaded_dataframe=loaded_dataframe)
 
@@ -100,30 +101,33 @@ if __name__ == '__main__':
                 "ratio": ratio
             }
 
-            start_time = time.time()
-            cc = WeightedEdgePruning(weighting_scheme='CN-CBS')
-            blocks = cc.process(new_bloom)
-            ev = cc.evaluate(blocks, verbose=False)
-            end_time = time.time()
+            prev_keys = new_bloom.blocks_with_keys.copy()
+            for cc_class in [ CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
+                new_bloom.blocks_with_keys = prev_keys.copy()
+                start_time = time.time()
+                cc = cc_class(weighting_scheme='CN-CBS')
+                blocks = cc.process(new_bloom)
+                ev = cc.evaluate(blocks, verbose=False)
+                end_time = time.time()
 
 
-            comparison_evaluation: Dict[str, float | str | int | dict] = {
-                "name": "Weighted Edge Pruning",
-                "weighting_scheme": 'CN-CBS',
-                "runtime": round(end_time - start_time, 2),
-                "candidate_pairs": int(ev['False Positives']) + int(ev['True Positives']),
-                "lsh_config": blocking_config,
-                "filtering_config": filtering_config,
-                }
+                comparison_evaluation: Dict[str, float | str | int | dict] = {
+                    "name": f"{cc_class.__name__}",
+                    "weighting_scheme": 'CN-CBS',
+                    "runtime": round(end_time - start_time, 2),
+                    "candidate_pairs": int(ev['False Positives']) + int(ev['True Positives']),
+                    "lsh_config": blocking_config,
+                    "filtering_config": filtering_config,
+                    }
 
-            for keys, items in ev.items():
-                comparison_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+                for keys, items in ev.items():
+                    comparison_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
 
-            comparison_evaluation['config'] = configuration
+                comparison_evaluation['config'] = configuration
 
-            df = pd.DataFrame([comparison_evaluation])
-            loaded = os.path.exists(f"{RESULTS}/WeightedEdgePruning.csv")
-            df.to_csv(f'{RESULTS}/WeightedEdgePruning.csv',
-                      mode='a+',
-                      index=False,
-                      header=not loaded)
+                df = pd.DataFrame([comparison_evaluation])
+                loaded = os.path.exists(f"{RESULTS}/{cc_class.__name__}.csv")
+                df.to_csv(f'{RESULTS}/{cc_class.__name__}.csv',
+                        mode='a+',
+                        index=False,
+                        header=not loaded)
