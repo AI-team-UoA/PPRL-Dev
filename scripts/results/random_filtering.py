@@ -21,12 +21,13 @@ from privjedai.comparison_cleaning import ( BLAST,
 if __name__ == '__main__':
 
 
-    for dir_ in ['D2', 'D3', 'D4', 'D8', 'D9', 'D10']:
+    for dir_ in ['D10']:
         DIR = dir_
         PATH = f"data/ccer/{DIR}"
 
         FILE, FILE2, attributes, SEP = dataframe_dict[DIR]
-        RESULTS = f"results/random_configurations/metablocking/{DIR}"
+        RESULTS_FILTERING = f"results/random_configurations/filtering/{DIR}"
+        RESULTS_METABLOCKING = f"results/random_configurations/metablocking/{DIR}"
 
         loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
         BLOOM_NAME = 'purging'
@@ -34,6 +35,8 @@ if __name__ == '__main__':
         print(f"Running purging for {DIR}")
 
         size = [64, 128, 256, 512, 1024]
+        if dir_ == 'D10':
+            size = [s // 2 for s in size]
 
         q_grams = [2, 3, 4]
 
@@ -88,8 +91,11 @@ if __name__ == '__main__':
             # ratio = ratio / 100
             # ratios.append(ratio)
 
+            start_time  = time.time()
             filtering = BlockPurging(smoothing_factor=0.9)
             _ = filtering.process(new_bloom)
+            end_time = time.time()
+            filtering_ev = filtering.evaluate_blocks( verbose=False)
 
             blocking_config = {
                 "psi": psi,
@@ -100,6 +106,26 @@ if __name__ == '__main__':
                 "method": "Block Purging",
                 "smoothing_factor": 0.9
             }
+
+            filtering_evaluation: Dict[str, float | str | int | dict] = {
+                "name": "Block Purging",
+                "smoothing_factor": 0.9,
+                "runtime": round(end_time - start_time, 2),
+                "candidate_pairs": int(filtering_ev['False Positives']) + int(filtering_ev['True Positives']),
+                "lsh_config": blocking_config,
+            }
+
+            for keys, items in filtering_ev.items():
+                filtering_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+
+            filtering_evaluation['config'] = configuration
+
+            df = pd.DataFrame([filtering_evaluation])
+            loaded = os.path.exists(f"{RESULTS_FILTERING}/BlockPurging.csv")
+            df.to_csv(f'{RESULTS_FILTERING}/block_purging.csv',
+                    mode='a+',
+                    index=False,
+                    header=not loaded)
 
             prev_keys = new_bloom.blocks_with_keys.copy()
             for cc_class in [ WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
@@ -126,8 +152,8 @@ if __name__ == '__main__':
                 comparison_evaluation['config'] = configuration
 
                 df = pd.DataFrame([comparison_evaluation])
-                loaded = os.path.exists(f"{RESULTS}/{cc_class.__name__}.csv")
-                df.to_csv(f'{RESULTS}/{cc_class.__name__}.csv',
+                loaded = os.path.exists(f"{RESULTS_METABLOCKING}/{cc_class.__name__}.csv")
+                df.to_csv(f'{RESULTS_METABLOCKING}/{cc_class.__name__}.csv',
                         mode='a+',
                         index=False,
                         header=not loaded)

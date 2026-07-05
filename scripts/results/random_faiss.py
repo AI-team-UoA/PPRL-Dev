@@ -15,7 +15,8 @@ if __name__ == '__main__':
     faiss_mode_type = Literal['flat', 'hnsw', 'multihash']
     FAISS_MODES : list[faiss_mode_type] = ['flat', 'hnsw', 'multihash']
 
-    for dir_ in ['D2', 'D3', 'D4', 'D8', 'D9', 'D10']:
+    for dir_ in ['D10']:
+
         DIR = dir_
         PATH = f"data/ccer/{DIR}"
 
@@ -28,6 +29,8 @@ if __name__ == '__main__':
         print(f"Running faiss for {DIR}")
 
         size = [64, 128, 256, 512, 1024]
+        if dir_ == 'D10':
+            size = [s // 2 for s in size]
 
         q_grams = [2, 3, 4]
 
