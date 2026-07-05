@@ -121,7 +121,7 @@ if __name__ == '__main__':
             filtering_evaluation['config'] = configuration
 
             df = pd.DataFrame([filtering_evaluation])
-            loaded = os.path.exists(f"{RESULTS_FILTERING}/BlockPurging.csv")
+            loaded = os.path.exists(f"{RESULTS_FILTERING}/block_purging.csv")
             df.to_csv(f'{RESULTS_FILTERING}/block_purging.csv',
                     mode='a+',
                     index=False,
