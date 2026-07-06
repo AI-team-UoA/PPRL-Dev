@@ -8,7 +8,7 @@ import pandas as pd
 
 from utils import load_dataframe, config_bloom_filter_with_configuration, dataframe_dict
 from privjedai.blocking import  BitBlocker
-from privjedai.block_filtering import BlockPurging
+from privjedai.block_filtering import BlockFiltering
 from privjedai.encoded_data import BloomEncodedData
 from privjedai.comparison_cleaning import ( BLAST,
                                     WeightedEdgePruning,
@@ -86,13 +86,13 @@ if __name__ == '__main__':
             _ = lsh_blocker.build_blocks(new_bloom)
 
 
-            # ratio = random.randrange(20, 90, 10)
+            ratio = random.randrange(20, 90, 10)
 
-            # ratio = ratio / 100
-            # ratios.append(ratio)
+            ratio = ratio / 100
+            ratios.append(ratio)
 
             start_time  = time.time()
-            filtering = BlockPurging(smoothing_factor=0.9)
+            filtering = BlockFiltering(ratio=ratio)
             _ = filtering.process(new_bloom)
             end_time = time.time()
             filtering_ev = filtering.evaluate_blocks( verbose=False)
@@ -103,13 +103,13 @@ if __name__ == '__main__':
                 "distance_threshold": distance_thr
             }
             filtering_config = {
-                "method": "Block Purging",
-                "smoothing_factor": 0.9
+                "method": "Block Filtering",
+                "ratio": ratio
             }
 
             filtering_evaluation: Dict[str, float | str | int | dict] = {
-                "name": "Block Purging",
-                "smoothing_factor": 0.9,
+                "name": "Block Filtering",
+                "ratio": ratio,
                 "runtime": round(end_time - start_time, 2),
                 "candidate_pairs": int(filtering_ev['False Positives']) + int(filtering_ev['True Positives']),
                 "lsh_config": blocking_config,
@@ -121,8 +121,8 @@ if __name__ == '__main__':
             filtering_evaluation['config'] = configuration
 
             df = pd.DataFrame([filtering_evaluation])
-            loaded = os.path.exists(f"{RESULTS_FILTERING}/block_purging.csv")
-            df.to_csv(f'{RESULTS_FILTERING}/block_purging.csv',
+            loaded = os.path.exists(f"{RESULTS_FILTERING}/block_filtering.csv")
+            df.to_csv(f'{RESULTS_FILTERING}/block_filtering.csv',
                     mode='a+',
                     index=False,
                     header=not loaded)
