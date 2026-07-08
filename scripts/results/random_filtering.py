@@ -8,7 +8,7 @@ import pandas as pd
 
 from utils import load_dataframe, config_bloom_filter_with_configuration, dataframe_dict
 from privjedai.blocking import  BitBlocker
-from privjedai.block_filtering import BlockFiltering
+from privjedai.block_filtering import BlockPurging, BlockFiltering
 from privjedai.encoded_data import BloomEncodedData
 from privjedai.comparison_cleaning import ( BLAST,
                                     WeightedEdgePruning,
@@ -92,6 +92,11 @@ if __name__ == '__main__':
             ratios.append(ratio)
 
             start_time  = time.time()
+            purging = BlockPurging(smoothing_factor=0.9)
+
+            _ = purging.process(new_bloom)
+
+
             filtering = BlockFiltering(ratio=ratio)
             _ = filtering.process(new_bloom)
             end_time = time.time()
@@ -103,12 +108,14 @@ if __name__ == '__main__':
                 "distance_threshold": distance_thr
             }
             filtering_config = {
-                "method": "Block Filtering",
+                "method": "Block Purging + Block Filtering",
+                "smoothing_factor": 0.9,
                 "ratio": ratio
             }
 
             filtering_evaluation: Dict[str, float | str | int | dict] = {
-                "name": "Block Filtering",
+                "name": "Block Purging + Block Filtering",
+                "smoothing_factor": 0.9,
                 "ratio": ratio,
                 "runtime": round(end_time - start_time, 2),
                 "candidate_pairs": int(filtering_ev['False Positives']) + int(filtering_ev['True Positives']),
@@ -121,20 +128,19 @@ if __name__ == '__main__':
             filtering_evaluation['config'] = configuration
 
             df = pd.DataFrame([filtering_evaluation])
-            loaded = os.path.exists(f"{RESULTS_FILTERING}/block_filtering.csv")
-            df.to_csv(f'{RESULTS_FILTERING}/block_filtering.csv',
+            loaded = os.path.exists(f"{RESULTS_FILTERING}/combination.csv")
+            df.to_csv(f'{RESULTS_FILTERING}/combination.csv',
                     mode='a+',
                     index=False,
                     header=not loaded)
 
-            prev_keys = new_bloom.blocks_with_keys.copy()
-            for cc_class in [ WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
-                new_bloom.blocks_with_keys = prev_keys.copy()
+            for cc_class in [WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
                 start_time = time.time()
                 cc = cc_class(weighting_scheme='CN-CBS')
                 blocks = cc.process(new_bloom)
                 ev = cc.evaluate(blocks, verbose=False)
                 end_time = time.time()
+
 
 
                 comparison_evaluation: Dict[str, float | str | int | dict] = {
