@@ -1,8 +1,11 @@
 """Random Blocking Experimental Analysis Script"""
 import os
 import random
+
+import ast
 import time
 from typing import Dict
+
 from tqdm import tqdm
 import pandas as pd
 
@@ -21,9 +24,29 @@ from privjedai.comparison_cleaning import ( BLAST,
 if __name__ == '__main__':
 
 
-    for dir_ in ['D2', 'D3', 'D4', 'D8', 'D9', 'D10']:
-        if dir_ == 'D10':
-            continue
+    def delete_block_purging_or_combination():
+
+        for dir_ in ['D2', 'D3', 'D4', 'D8', 'D9', 'D10']:
+            RESULTS_METABLOCKING = f"results/random_configurations/metablocking/{dir_}"
+
+            for cc_class in [WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
+                if os.path.exists(f"{RESULTS_METABLOCKING}/{cc_class.__name__}.csv"):
+                    df = pd.read_csv(f"{RESULTS_METABLOCKING}/{cc_class.__name__}.csv")
+                    df['filtering_config'] = df['filtering_config'].apply(ast.literal_eval)
+                    df = df[~df['filtering_config'].apply(lambda x: 'Block Purging + Block Filtering' in x.get('method', ''))]
+                    df = df.reset_index(drop=True)
+
+                    df.to_csv(f"{RESULTS_METABLOCKING}/{cc_class.__name__}.csv", index=False)
+            print(f"Deleted Block Purging or Combination from {RESULTS_METABLOCKING}")
+
+    delete_block_purging_or_combination()
+
+    dir_list = ['D2', 'D3', 'D4', 'D8', 'D9', 'D10']
+    # dir_list = ['D2']
+
+    for dir_ in dir_list:
+        # if dir_ == 'D10':
+        #     continue
         DIR = dir_
         PATH = f"data/ccer/{DIR}"
 
@@ -88,21 +111,22 @@ if __name__ == '__main__':
             _ = lsh_blocker.build_blocks(new_bloom)
 
 
-            # ratio = random.randrange(20, 90, 10)
+            ratio = random.randrange(20, 90, 10)
 
-            # ratio = ratio / 100
-            # ratios.append(ratio)
+            ratio = ratio / 100
+            ratios.append(ratio)
 
-            # start_time  = time.time()
-            # purging = BlockPurging(smoothing_factor=0.9)
+            start_time  = time.time()
+            smoothing_factor = 0.9
+            purging = BlockPurging(smoothing_factor=smoothing_factor)
 
-            # _ = purging.process(new_bloom)
+            _ = purging.process(new_bloom)
 
 
-            # filtering = BlockFiltering(ratio=ratio)
-            # _ = filtering.process(new_bloom)
-            # end_time = time.time()
-            # filtering_ev = filtering.evaluate_blocks( verbose=False)
+            filtering = BlockFiltering(ratio=ratio)
+            _ = filtering.process(new_bloom)
+            end_time = time.time()
+            filtering_ev = filtering.evaluate_blocks(verbose=False)
 
             blocking_config = {
                 "psi": psi,
@@ -110,33 +134,34 @@ if __name__ == '__main__':
                 "distance_threshold": distance_thr
             }
             filtering_config = {
-                "method": "None",
-                # "smoothing_factor": 0.9,
-                # "ratio": ratio
+                "method": "Block Purging",
+                "smoothing_factor": smoothing_factor,
+                "ratio": ratio
             }
 
-            # filtering_evaluation: Dict[str, float | str | int | dict] = {
-            #     "name": "Block Purging + Block Filtering",
-            #     "smoothing_factor": 0.9,
-            #     "ratio": ratio,
-            #     "runtime": round(end_time - start_time, 2),
-            #     "candidate_pairs": int(filtering_ev['False Positives']) + int(filtering_ev['True Positives']),
-            #     "lsh_config": blocking_config,
-            # }
+            filtering_evaluation: Dict[str, float | str | int | dict] = {
+                "name": "Block Purging + Block Filtering",
+                "smoothing_factor": smoothing_factor,
+                "ratio": ratio,
+                "runtime": round(end_time - start_time, 2),
+                "candidate_pairs": int(filtering_ev['False Positives']) + int(filtering_ev['True Positives']),
+                "lsh_config": blocking_config,
+            }
 
-            # for keys, items in filtering_ev.items():
-            #     filtering_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+            for keys, items in filtering_ev.items():
+                filtering_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
 
-            # filtering_evaluation['config'] = configuration
+            filtering_evaluation['config'] = configuration
 
-            # df = pd.DataFrame([filtering_evaluation])
-            # loaded = os.path.exists(f"{RESULTS_FILTERING}/combination.csv")
-            # df.to_csv(f'{RESULTS_FILTERING}/combination.csv',
-            #         mode='a+',
-            #         index=False,
-            #         header=not loaded)
+            df = pd.DataFrame([filtering_evaluation])
+            loaded = os.path.exists(f"{RESULTS_FILTERING}/combination.csv")
+            df.to_csv(f'{RESULTS_FILTERING}/combination.csv',
+                    mode='a+',
+                    index=False,
+                    header=not loaded)
 
             for cc_class in [WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
+
                 start_time = time.time()
                 cc = cc_class(weighting_scheme='CN-CBS')
                 blocks = cc.process(new_bloom)
