@@ -1,0 +1,11 @@
+name,runtime,candidate_pairs,psi,lambda,distance_threshold,Precision %,Recall %,F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+LSH-Blocking,77.63,224747035,9,120,25,0.01,75.88,0.01,16806,224730229,22073,5342,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
+LSH-Blocking,123.22,2413448,19,125,204,0.18,19.97,0.36,4422,2409026,9689,17726,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 17, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
+LSH-Blocking,24.73,55645043,12,110,19,0.02,51.21,0.04,11343,55633700,16610,10805,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
+LSH-Blocking,428.69,609380123,7,147,512,0.0,99.95,0.01,22136,609357987,27403,12,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 10, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+LSH-Blocking,758.81,569833805,40,137,51,0.0,98.29,0.01,21769,569812036,27036,379,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+LSH-Blocking,159.76,483004096,7,147,64,0.0,91.46,0.01,20257,482983839,25524,1891,"{'attributes': ['title', 'starring'], 'size': 64, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
+LSH-Blocking,325.63,177205069,40,137,51,0.01,69.7,0.02,15437,177189632,20704,6711,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 2, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 4}"
+LSH-Blocking,40.84,54370470,12,115,307,0.02,56.65,0.05,12547,54357923,17814,9601,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 18, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
+LSH-Blocking,389.74,608706206,7,147,512,0.0,99.86,0.01,22117,608684089,27384,31,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 9, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
+LSH-Blocking,862.33,611564288,9,134,204,0.0,100.0,0.01,22148,611542140,27415,0,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
