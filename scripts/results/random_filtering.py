@@ -24,12 +24,98 @@ if __name__ == '__main__':
         PATH = f"data/ccer/{DIR}"
 
         FILE, FILE2, attributes, SEP = dataframe_dict[DIR]
-        # RESULTS_BLOCKING = f"results/random_configurations/unique_blocking/lsh_blocker/{DIR}"
-        RESULTS_FILTERING = f"results/random_configurations/unique_blocking/filtering/{DIR}"
+        RESULTS_BLOCKING = f"results/random_configurations/unique_blocking/lsh_blocker/{DIR}"
+        ORIGINAL_BLOCKING = f"results/random_configurations/lsh_blocker/{DIR}"
+        # RESULTS_FILTERING = f"results/random_configurations/unique_blocking/filtering/{DIR}"
         # RESULTS_METABLOCKING = f"results/random_configurations/unique_blocking/metablocking/{DIR}"
+
+
+        lsh_df = pd.read_csv(f"{ORIGINAL_BLOCKING}/lsh_blocker.csv")
+        psi_list = lsh_df['psi'].values
+        lambda_list = lsh_df['lambda'].values
+        config_list = lsh_df['config'].values
+        distance_threshold_list = lsh_df['distance_threshold'].values
+        runtime_list = lsh_df['runtime'].values
 
         loaded_dataframe = load_dataframe(PATH, (FILE, FILE2), SEP)
         BLOOM_NAME = 'filtering'
+
+        unique_candidate_pairs = []
+        unique_precision = []
+        unique_f1 = []
+
+        for psi, lambda_, config, distance_threshold, runtime in tqdm(zip(psi_list,
+                    lambda_list, config_list, distance_threshold_list, runtime_list),
+                    total=100, leave=False, desc=f"Running unique configurations for {DIR}"):
+            config = ast.literal_eval(config)
+            new_bloom : BloomEncodedData = config_bloom_filter_with_configuration(configuration=config,
+                                                            bloom_name=BLOOM_NAME,
+                                                            loaded_dataframe=loaded_dataframe)
+
+            lsh_blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=42)
+            lsh_blocks = lsh_blocker.build_blocks(new_bloom)
+            blocking_ev = lsh_blocker.evaluate(lsh_blocks, verbose=False)
+            unique_candidate_pairs.append(int(blocking_ev['False Positives']) + int(blocking_ev['True Positives']))
+            unique_precision.append(round(blocking_ev['Precision %'], 2))
+            unique_f1.append(round(blocking_ev['F1 %'], 2))
+
+
+            blocking_config = {
+                "psi": psi,
+                "lambda": lambda_,
+                "distance_threshold": distance_threshold
+            }
+
+            blocking_evaluation : Dict[str, float | str | int | dict] = {
+                "name": "LSH-Blocking",
+                "runtime": round(runtime, 2),
+                "candidate_pairs": int(blocking_ev['False Positives']) + int(blocking_ev['True Positives']),
+                "psi": psi,
+                "lambda": lambda_,
+                "distance_threshold": distance_threshold
+            }
+
+            for keys, items in blocking_ev.items():
+                blocking_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+
+            blocking_evaluation['config'] = config
+            df = pd.DataFrame([blocking_evaluation])
+            loaded = os.path.exists(f"{RESULTS_BLOCKING}/lsh_blocker.csv")
+            df.to_csv(f'{RESULTS_BLOCKING}/lsh_blocker.csv',
+                  mode='a+',
+                  index=False,
+                  header=not loaded, float_format='%.2f')
+
+        lsh_df['unique_candidate_pairs'] = unique_candidate_pairs
+        lsh_df['Unique Precision %'] = unique_precision
+        lsh_df['Unique F1 %'] = unique_f1
+
+        cols = list(lsh_df.columns)
+        cols.remove('unique_candidate_pairs')
+
+        index_col = cols.index('candidate_pairs')
+        cols.insert(index_col, 'unique_candidate_pairs')
+
+        cols.remove('Unique Precision %')
+        cols.remove("Unique F1 %")
+
+        index_col = cols.index('F1 %')
+        cols.insert(index_col, 'Unique Precision %')
+        cols.insert(index_col + 1, 'Unique F1 %')
+
+        lsh_df = lsh_df[cols]
+        lsh_df.to_csv(f"{ORIGINAL_BLOCKING}/lsh_blocker.csv",
+                      index=False, float_format='%.2f')
+
+        continue
+
+
+
+
+
+
+
+
 
         print(f"Running no filtering for {DIR}")
 
@@ -85,7 +171,7 @@ if __name__ == '__main__':
             lsh_blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=42)
             lsh_blocks = lsh_blocker.build_blocks(new_bloom)
             end_time = time.time()
-            # blocking_ev = lsh_blocker.evaluate(lsh_blocks, verbose=False)
+            blocking_ev = lsh_blocker.evaluate(lsh_blocks, verbose=False)
 
 
             blocking_config = {
@@ -94,42 +180,45 @@ if __name__ == '__main__':
                 "distance_threshold": distance_thr
             }
 
-            # blocking_evaluation : Dict[str, float | str | int | dict] = {
-                # "name": "LSH-Blocking",
-                # "runtime": round(end_time - start_time, 2),
-                # "candidate_pairs": int(blocking_ev['False Positives']) + int(blocking_ev['True Positives']),
-                # "psi": psi,
-                # "lambda": lambda_,
-                # "distance_threshold": distance_thr
-            # }
+            blocking_evaluation : Dict[str, float | str | int | dict] = {
+                "name": "LSH-Blocking",
+                "runtime": round(end_time - start_time, 2),
+                "candidate_pairs": int(blocking_ev['False Positives']) + int(blocking_ev['True Positives']),
+                "psi": psi,
+                "lambda": lambda_,
+                "distance_threshold": distance_thr
+            }
 
-            # for keys, items in blocking_ev.items():
-                # blocking_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
+            for keys, items in blocking_ev.items():
+                blocking_evaluation[keys] = round(items, 2) if isinstance(items, float) else items
 
-            # blocking_evaluation['config'] = configuration
-            # df = pd.DataFrame([blocking_evaluation])
-            # loaded = os.path.exists(f"{RESULTS_BLOCKING}/lsh_blocker.csv")
-            # df.to_csv(f'{RESULTS_BLOCKING}/lsh_blocker.csv',
-                #   mode='a+',
-                #   index=False,
-                #   header=not loaded)
+            blocking_evaluation['config'] = configuration
+            df = pd.DataFrame([blocking_evaluation])
+            loaded = os.path.exists(f"{RESULTS_BLOCKING}/lsh_blocker.csv")
+            df.to_csv(f'{RESULTS_BLOCKING}/lsh_blocker.csv',
+                  mode='a+',
+                  index=False,
+                  header=not loaded)
+
+            continue
 
 
             blocking_runtime = round(end_time - start_time, 2)
-            # ratio = random.randrange(20, 90, 10)
-
-            # ratio = ratio / 100
-            # ratios.append(ratio)
-
             start_time  = time.time()
+
+            ratio = random.randrange(20, 90, 10)
+
+            ratio = ratio / 100
+            ratios.append(ratio)
+
             smoothing_factor = 0.9
             purging = BlockPurging(smoothing_factor=smoothing_factor)
 
             blocks_with_keys = purging.process(new_bloom)
 
 
-            # filtering = BlockPurging(ratio=ratio)
-            # blocks_with_keys = filtering.process(new_bloom)
+            filtering = BlockFiltering(ratio=ratio)
+            blocks_with_keys = filtering.process(new_bloom)
 
 
             end_time = time.time()
@@ -154,12 +243,14 @@ if __name__ == '__main__':
             filtering_ev = purging.evaluate(filter_blocks, verbose=False)
 
             filtering_config = {
-                "method": "Block Purging",
-                "smoothing_factor": smoothing_factor
+                "method": "Block Filtering + Block Purging",
+                "ratio": ratio,
+                "smoothing_factor": smoothing_factor,
             }
 
             filtering_evaluation: Dict[str, float | str | int | dict] = {
-                "name": "Block Purging",
+                "name": "Block Filtering + Block Purging",
+                "ratio": ratio,
                 "smoothing_factor": smoothing_factor,
                 "runtime": round(end_time - start_time, 2),
                 'total_runtime': round(blocking_runtime + (end_time - start_time), 2),
@@ -173,8 +264,8 @@ if __name__ == '__main__':
             filtering_evaluation['config'] = configuration
 
             df = pd.DataFrame([filtering_evaluation])
-            loaded = os.path.exists(f"{RESULTS_FILTERING}/block_purging.csv")
-            df.to_csv(f'{RESULTS_FILTERING}/block_purging.csv',
+            loaded = os.path.exists(f"{RESULTS_FILTERING}/combination.csv")
+            df.to_csv(f'{RESULTS_FILTERING}/combination.csv',
                     mode='a+',
                     index=False,
                     header=not loaded)
