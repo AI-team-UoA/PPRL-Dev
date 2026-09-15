@@ -1,4 +1,5 @@
 """Random Blocking Experimental Analysis Script"""
+import gc
 import os
 import random
 from collections import defaultdict
@@ -40,6 +41,7 @@ if __name__ == '__main__':
 
 
         filtering_df = pd.read_csv(f'{ORIGINAL_FILTERING}/old_block_filtering.csv')
+        done_df = pd.read_csv(f'{ORIGINAL_FILTERING}/block_filtering.csv')
         filtering_df['lsh_config'] = filtering_df['lsh_config'].apply(ast.literal_eval)
 
 
@@ -55,10 +57,13 @@ if __name__ == '__main__':
 
 
         ratio = 0.8
-        for psi, lambda_, config, distance_threshold in tqdm(zip(psi_list,
-                    lambda_list, config_list, distance_threshold_list),
+        for i, (psi, lambda_, config, distance_threshold) in tqdm(enumerate(zip(psi_list,
+                    lambda_list, config_list, distance_threshold_list)),
                     total=100, leave=False, desc=f"Running unique configurations for {DIR}"):
 
+            if i < done_df.shape[0]:
+                print(f"Skipping {i} as it is already done")
+                continue
 
 
             pbar = tqdm(total=7, position=2, leave=False, desc='Steps Remaining')
@@ -142,7 +147,7 @@ if __name__ == '__main__':
                 'COSINE', 'DICE', 'ECBS', 'JS', 'EJS', 'X2']
 
             for cc_class in [WeightedEdgePruning, WeightedNodePruning, CardinalityEdgePruning, CardinalityNodePruning, BLAST]:
-                for weighting_scheme in tqdm(weighting_schemes, desc=f"Processing {cc_class.__name__}", position=1):
+                for weighting_scheme in tqdm(weighting_schemes, desc=f"Processing {cc_class.__name__}", leave=False, position=1):
                     start_time = time.time()
                     cc = cc_class(weighting_scheme=weighting_scheme)
                     blocks = cc.process(new_bloom)
@@ -172,6 +177,10 @@ if __name__ == '__main__':
                             mode='a+',
                             index=False,
                             header=not loaded, float_format="%.2f")
+                    del cc
+                    del blocks
+                    del ev
+                    gc.collect()
                 pbar.update(1)
             pbar.close()
 
@@ -220,6 +229,13 @@ if __name__ == '__main__':
         # filtering_df.to_csv(f"{ORIGINAL_FILTERING}/block_filtering.csv",
         #               index=False, float_format='%.2f')
 
+
+        del new_bloom
+        del lsh_blocker
+        del block_filter
+        del lsh_blocks
+        del filtered_blocks
+        gc.collect()
         continue
 
 
