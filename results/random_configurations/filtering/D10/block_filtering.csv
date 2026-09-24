@@ -1,0 +1,2 @@
+name,ratio,runtime,candidate_pairs,total_runtime,unique_candidate_pairs,lsh_config,Precision %,Recall %,F1 %,Unique Precision %,Unique F1 %,True Positives,False Positives,True Negatives,False Negatives,config
+Block Filtering,0.80,3.59,99455229,50.80,73838540,"{'psi': 9, 'lambda': 120, 'distance_threshold': 25}",0.01,59.93,0.03,0.02,0.04,13274,99441955,18541,8874,"{'attributes': ['title', 'starring'], 'size': 32, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
