@@ -6,7 +6,7 @@ import random
 import time
 import numpy as np
 from tqdm import tqdm
-
+from multiprocessing import Process
 
 from collections import defaultdict
 
@@ -16,9 +16,154 @@ from privjedai.block_filtering import BlockPurging, BlockFiltering
 from privjedai.encoded_data import BloomEncodedData
 
 
+
+
+def bitblocker_function(method_, new_bloom_, psi, lambda_, ratio_, seed_):
+
+    start_time = time.time()
+    blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=seed_)
+    blocks = blocker.build_blocks(new_bloom_)
+    end_time = time.time()
+
+    runtime = round(end_time - start_time, 2)
+
+    ev = blocker.evaluate(blocks, verbose=False)
+    ev_with_keys = blocker.evaluate_blocks(verbose=False)
+
+    if method_ == 'LSH+BP':
+        start_time = time.time()
+        block_purging = BlockPurging(smoothing_factor=0.9)
+        blocks_purged = block_purging.process(new_bloom_)
+        end_time = time.time()
+        runtime += round(end_time - start_time, 2)
+        ev = block_purging.evaluate(verbose=False)
+        ev_with_keys = block_purging.evaluate_blocks(verbose=False)
+    elif method_ == 'LSH+BF':
+        start_time = time.time()
+        block_filtering = BlockFiltering(ratio=ratio_)
+        blocks_filtered = block_filtering.process(new_bloom_)
+        end_time = time.time()
+        runtime += round(end_time - start_time, 2)
+        ev = block_filtering.evaluate(verbose=False)
+        ev_with_keys = block_filtering.evaluate_blocks(verbose=False)
+    elif method_ == 'LSH+BP+BF':
+        start_time = time.time()
+        block_purging = BlockPurging(smoothing_factor=0.9)
+        blocks_purged = block_purging.process(new_bloom_)
+        block_filtering = BlockFiltering(ratio=ratio_)
+        blocks_filtered = block_filtering.process(new_bloom_)
+        end_time = time.time()
+        runtime += round(end_time - start_time, 2)
+        ev = block_filtering.evaluate(verbose=False)
+        ev_with_keys = block_filtering.evaluate_blocks(verbose=False)
+
+    return ev, ev_with_keys, runtime
+
+
+def process_seed_run(method_, new_bloom_, psi, lambda_, ratio_, dataset_, configuration_, seed_):
+
+    ev, ev_with_keys, runtime = bitblocker_function(method_, new_bloom_, psi, lambda_, ratio_, seed_)
+
+    df_method = pd.DataFrame({
+        'Dataset': [dataset_],
+        'Method': [method_],
+        'Precision %': [ev_with_keys['Precision %']],
+        'Recall %': [ev_with_keys['Recall %']],
+        'F1 %': [ev_with_keys['F1 %']],
+        'Unique Precision %': [ev['Precision %']],
+        'Unique F1 %': [ev['F1 %']],
+        'Candidate pairs': [ev_with_keys['False Positives'] + ev_with_keys['True Positives']],
+        'Unique Candidate pairs': [ev['False Positives'] + ev['True Positives']],
+        'Runtime': [runtime],
+        'Ratio': [ratio_],
+        'Seed': [seed_],
+        'Configuration': [configuration_],
+    })
+
+
+    df_method.to_csv(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv",
+            index=False, float_format='%.2f',
+            header=not os.path.exists(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv"),
+            mode='a+')
+
+
+
+
+def main_process(results_row_, method_, new_bloom_, ratio_, dataset_, configuration_):
+
+    precision, recall, f1, unique_precision, unique_f1, candidate_pairs, unique_candidate_pairs, runtimes = [], [], [], [], [], [], [], []
+
+    psi, lambda_ = None, None
+
+    if method_ == 'LSH':
+        psi = results_row_['psi']
+        lambda_ = results_row_['lambda']
+    else:
+        lsh_config = ast.literal_eval(results_row_['lsh_config'])
+        psi = lsh_config['psi']
+        lambda_ = lsh_config['lambda']
+
+    ev, ev_with_keys, runtime = bitblocker_function(method_, new_bloom_, psi, lambda_, ratio_, 42)
+
+
+    precision.append(ev_with_keys['Precision %'])
+    recall.append(ev_with_keys['Recall %'])
+    f1.append(ev_with_keys['F1 %'])
+    unique_precision.append(ev['Precision %'])
+    unique_f1.append(ev['F1 %'])
+    candidate_pairs.append(int(ev_with_keys['False Positives']) + int(ev_with_keys['True Positives']))
+    unique_candidate_pairs.append(int(ev['False Positives']) + int(ev['True Positives']))
+    runtimes.append(runtime)
+
+    df_method = pd.DataFrame({
+        'Dataset': [dataset_],
+        'Method': [method_],
+        'Precision %': [precision[0]],
+        'Recall %': [recall[0]],
+        'F1 %': [f1[0]],
+        'Unique Precision %': [unique_precision[0]],
+        'Unique F1 %': [unique_f1[0]],
+        'Candidate pairs': [candidate_pairs[0]],
+        'Unique Candidate pairs': [unique_candidate_pairs[0]],
+        'Runtime': [runtimes[0]],
+        'Ratio': [ratio_],
+        'Seed': [42],
+        'Configuration': [configuration_],
+    })
+
+    df_method.to_csv(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv",
+            index=False, float_format='%.2f',
+            header=not os.path.exists(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv"),
+            mode='a+')
+
+
+    for _ in range(9):
+        seed = random.randint(0, 10000)
+        p_sub = Process(target=process_seed_run,
+            kwargs={
+                'method_': method_,
+                'new_bloom_': new_bloom_,
+                'psi': psi,
+                'lambda_': lambda_,
+                'ratio_': ratio_,
+                'dataset_': dataset_,
+                'configuration_': configuration_,
+                'seed_': seed
+            }
+        )
+
+        p_sub.start()
+        p_sub.join()
+
+
+
+
+
+
+
+
 if __name__ == "__main__":
     df = pd.read_csv("scripts/data_manipulation/selected_configurations.csv")
-    df_avg = pd.read_csv("scripts/data_manipulation/avg_selected_configurations.csv")
 
     original_index = df['Original Row Index'].values
 
@@ -51,10 +196,7 @@ if __name__ == "__main__":
 
     for i, orig_index in tqdm(enumerate(original_index), total=len(original_index), desc="Processing configurations"):
 
-        if i < df_avg.shape[0]:
-            continue
 
-        precision, recall, f1, unique_precision, unique_f1, candidate_pairs, unique_candidate_pairs, runtimes = [], [], [], [], [], [], [], []
         results_df = pd.read_csv(f"{filepaths[methods[i]]}/{datasets[i]}/{filenames[methods[i]]}")
         results_row = results_df.iloc[orig_index]
 
@@ -71,176 +213,19 @@ if __name__ == "__main__":
         new_bloom = config_bloom_filter_with_configuration( configuration, BLOOM_NAME, loaded_dataframe)
 
 
-        psi, lambda_ = None, None
-
-        if methods[i] == 'LSH':
-            psi = results_row['psi']
-            lambda_ = results_row['lambda']
-        else:
-            lsh_config = ast.literal_eval(results_row['lsh_config'])
-            psi = lsh_config['psi']
-            lambda_ = lsh_config['lambda']
-
-
-        start_time = time.time()
-        blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=42)
-        blocks = blocker.build_blocks(new_bloom)
-        end_time = time.time()
-
-        runtime = round(end_time - start_time, 2)
-
-        ev = blocker.evaluate(blocks, verbose=False)
-        ev_with_keys = blocker.evaluate_blocks(verbose=False)
-
-        if methods[i] == 'LSH+BP':
-            start_time = time.time()
-            block_purging = BlockPurging(smoothing_factor=0.9)
-            blocks_purged = block_purging.process(new_bloom)
-            end_time = time.time()
-            runtime += round(end_time - start_time, 2)
-            ev = block_purging.evaluate(verbose=False)
-            ev_with_keys = block_purging.evaluate_blocks(verbose=False)
-        elif methods[i] == 'LSH+BF':
-            start_time = time.time()
-            block_filtering = BlockFiltering(ratio=ratios[i])
-            blocks_filtered = block_filtering.process(new_bloom)
-            end_time = time.time()
-            runtime += round(end_time - start_time, 2)
-            ev = block_filtering.evaluate(verbose=False)
-            ev_with_keys = block_filtering.evaluate_blocks(verbose=False)
-        elif methods[i] == 'LSH+BP+BF':
-            start_time = time.time()
-            block_purging = BlockPurging(smoothing_factor=0.9)
-            blocks_purged = block_purging.process(new_bloom)
-            block_filtering = BlockFiltering(ratio=ratios[i])
-            blocks_filtered = block_filtering.process(new_bloom)
-            end_time = time.time()
-            runtime += round(end_time - start_time, 2)
-            ev = block_filtering.evaluate(verbose=False)
-            ev_with_keys = block_filtering.evaluate_blocks(verbose=False)
-
-
-        precision.append(ev_with_keys['Precision %'])
-        recall.append(ev_with_keys['Recall %'])
-        f1.append(ev_with_keys['F1 %'])
-        unique_precision.append(ev['Precision %'])
-        unique_f1.append(ev['F1 %'])
-        candidate_pairs.append(int(ev_with_keys['False Positives']) + int(ev_with_keys['True Positives']))
-        unique_candidate_pairs.append(int(ev['False Positives']) + int(ev['True Positives']))
-        runtimes.append(runtime)
-
-        df_method = pd.DataFrame({
-            'Dataset': [DATASET],
-            'Method': [methods[i]],
-            'Precision %': [precision[0]],
-            'Recall %': [recall[0]],
-            'F1 %': [f1[0]],
-            'Unique Precision %': [unique_precision[0]],
-            'Unique F1 %': [unique_f1[0]],
-            'Candidate pairs': [candidate_pairs[0]],
-            'Unique Candidate pairs': [unique_candidate_pairs[0]],
-            'Runtime': [runtimes[0]],
-            'Ratio': [ratios[i]],
-            'Seed': [42],
-            'Configuration': [configuration],
-        })
-
-        df_method.to_csv(f"scripts/data_manipulation/seed_runs/{DATASET}_{methods[i]}.csv",
-                index=False, float_format='%.2f',
-                header=not os.path.exists(f"scripts/data_manipulation/seed_runs/{DATASET}_{methods[i]}.csv"),
-                mode='a+')
-
-
-        for j in range(9):
-            seed = random.randint(0, 10000)
-            start_time = time.time()
-            blocker = BitBlocker(psi=psi, lambda_=lambda_, seed=seed)
-            blocks = blocker.build_blocks(new_bloom)
-            end_time = time.time()
-
-            runtime = round(end_time - start_time, 2)
-
-            ev = blocker.evaluate(blocks, verbose=False)
-            ev_with_keys = blocker.evaluate_blocks(verbose=False)
-
-            if methods[i] == 'LSH+BP':
-                start_time = time.time()
-                block_purging = BlockPurging(smoothing_factor=0.9)
-                blocks_purged = block_purging.process(new_bloom)
-                end_time = time.time()
-                runtime += round(end_time - start_time, 2)
-                ev = block_purging.evaluate(verbose=False)
-                ev_with_keys = block_purging.evaluate_blocks(verbose=False)
-            elif methods[i] == 'LSH+BF':
-                start_time = time.time()
-                block_filtering = BlockFiltering(ratio=ratios[i])
-                blocks_filtered = block_filtering.process(new_bloom)
-                end_time = time.time()
-                runtime += round(end_time - start_time, 2)
-                ev = block_filtering.evaluate(verbose=False)
-                ev_with_keys = block_filtering.evaluate_blocks(verbose=False)
-            elif methods[i] == 'LSH+BP+BF':
-                start_time = time.time()
-                block_purging = BlockPurging(smoothing_factor=0.9)
-                blocks_purged = block_purging.process(new_bloom)
-                block_filtering = BlockFiltering(ratio=ratios[i])
-                blocks_filtered = block_filtering.process(new_bloom)
-                end_time = time.time()
-                runtime += round(end_time - start_time, 2)
-                ev = block_filtering.evaluate(verbose=False)
-                ev_with_keys = block_filtering.evaluate_blocks(verbose=False)
-
-
-            precision.append(ev_with_keys['Precision %'])
-            recall.append(ev_with_keys['Recall %'])
-            f1.append(ev_with_keys['F1 %'])
-            unique_precision.append(ev['Precision %'])
-            unique_f1.append(ev['F1 %'])
-            candidate_pairs.append(int(ev_with_keys['False Positives']) + int(ev_with_keys['True Positives']))
-            unique_candidate_pairs.append(int(ev['False Positives']) + int(ev['True Positives']))
-            runtimes.append(runtime)
-
-            df_method = pd.DataFrame({
-                'Dataset': [DATASET],
-                'Method': [methods[i]],
-                'Precision %': [precision[j + 1]],
-                'Recall %': [recall[j + 1]],
-                'F1 %': [f1[j + 1]],
-                'Unique Precision %': [unique_precision[j+1]],
-                'Unique F1 %': [unique_f1[j+1]],
-                'Candidate pairs': [candidate_pairs[j + 1]],
-                'Unique Candidate pairs': [unique_candidate_pairs[j + 1]],
-                'Runtime': [runtimes[j + 1]],
-                'Ratio': [ratios[i]],
-                'Seed': [seed],
-                'Configuration': [configuration],
+        pr = Process(target=main_process,
+            kwargs={
+                'results_row_': results_row,
+                'method_': methods[i],
+                'new_bloom_': new_bloom,
+                'ratio_': ratios[i],
+                'dataset_': DATASET,
+                'configuration_': configuration
             })
 
-            df_method.to_csv(f"scripts/data_manipulation/seed_runs/{DATASET}_{methods[i]}.csv",
-                index=False, float_format='%.2f',
-                header=not os.path.exists(f"scripts/data_manipulation/seed_runs/{DATASET}_{methods[i]}.csv"),
-                mode='a+')
+        pr.start()
+        pr.join()
 
-        df_method = pd.DataFrame({
-            'Dataset': [DATASET],
-            'Method': [methods[i]],
-            'Precision %': [np.mean(precision)],
-            'Recall %': [np.mean(recall)],
-            'F1 %': [np.mean(f1)],
-            'Unique Precision %': [np.mean(unique_precision)],
-            'Unique F1 %': [np.mean(unique_f1)],
-            'Candidate pairs': [np.mean(candidate_pairs)],
-            'Unique Candidate pairs': [np.mean(unique_candidate_pairs)],
-            'Runtime': [np.mean(runtimes)],
-            'Ratio': [ratios[i]],
-            'Configuration': [configuration],
-        })
-
-
-        df_method.to_csv(f"scripts/data_manipulation/avg_selected_configurations.csv",
-                index=False, float_format='%.2f',
-                header=not os.path.exists(f"scripts/data_manipulation/avg_selected_configurations.csv"),
-                mode='a+')
 
     print("Done processing all configurations. Results saved in 'scripts/data_manipulation/seed_runs/' and 'scripts/data_manipulation/avg_selected_configurations.csv'.")
 
