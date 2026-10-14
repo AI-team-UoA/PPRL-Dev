@@ -62,7 +62,7 @@ def bitblocker_function(method_, new_bloom_, results_row_, seed_):
 
 def process_seed_run(method_, new_bloom_, results_row_, dataset_, configuration_, seed_):
 
-    ev, runtime = bitblocker_function(method_, new_bloom_, results_row_, 42)
+    ev, runtime = bitblocker_function(method_, new_bloom_, results_row_, seed_)
 
     df_method = pd.DataFrame({
         'Datase`t': [dataset_],
@@ -73,7 +73,7 @@ def process_seed_run(method_, new_bloom_, results_row_, dataset_, configuration_
         'Candidate pairs': [ev['False Positives'] + ev['True Positives']],
         'Runtime': [runtime],
         'Weighting Scheme': [results_row_['weighting_scheme']],
-        'Seed': [42],
+        'Seed': [seed_],
         'Configuration': [configuration_],
     })
 
@@ -82,54 +82,6 @@ def process_seed_run(method_, new_bloom_, results_row_, dataset_, configuration_
             index=False, float_format='%.2f',
             header=not os.path.exists(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv"),
             mode='a+')
-
-
-
-
-def main_process(results_row_, method_, new_bloom_, dataset_, configuration_):
-
-
-
-    ev, runtime = bitblocker_function(method_, new_bloom_, results_row_, 42)
-
-    df_method = pd.DataFrame({
-        'Dataset': [dataset_],
-        'Method': [method_],
-        'Precision %': [ev['Precision %']],
-        'Recall %': [ev['Recall %']],
-        'F1 %': [ev['F1 %']],
-        'Candidate pairs': [ev['False Positives'] + ev['True Positives']],
-        'Runtime': [runtime],
-        'Weighting Scheme': [results_row_['weighting_scheme']],
-        'Seed': [42],
-        'Configuration': [configuration_],
-    })
-
-    df_method.to_csv(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv",
-            index=False, float_format='%.2f',
-            header=not os.path.exists(f"scripts/data_manipulation/seed_runs/{dataset_}_{method_}.csv"),
-            mode='a+')
-
-    for _ in tqdm(range(9), position=2, total=9, desc=f"Processing seeds for {dataset_} - {method_}", leave=False):
-        seed = random.randint(0, 10000)
-        p_sub = Process(target=process_seed_run,
-            kwargs={
-                'method_': method_,
-                'new_bloom_': new_bloom_,
-                'results_row_': results_row_,
-                'dataset_': dataset_,
-                'configuration_': configuration_,
-                'seed_': seed
-            }
-        )
-
-        p_sub.start()
-        p_sub.join()
-
-
-
-
-
 
 
 
@@ -170,9 +122,14 @@ if __name__ == "__main__":
 
         DATASET = datasets[i]
 
-        if DATASET == "D10":
+        if DATASET == "D10" and not methods[i] in ['WEP', 'WNP', 'BLAST']:
             time.sleep(0.5)
             continue
+
+        # if methods[i] in ['CNP', 'CEP']:
+        #     time.sleep(0.5)
+        #     continue
+
 
         PATH = f"data/ccer/{DATASET}"
 
@@ -185,17 +142,25 @@ if __name__ == "__main__":
         new_bloom = config_bloom_filter_with_configuration( configuration, BLOOM_NAME, loaded_dataframe)
 
 
-        pr = Process(target=main_process,
-            kwargs={
-                'results_row_': results_row,
-                'method_': methods[i],
-                'new_bloom_': new_bloom,
-                'dataset_': DATASET,
-                'configuration_': configuration
-            })
 
-        pr.start()
-        pr.join()
+        for iteration in tqdm(range(10), position=2, total=10, desc=f"Processing seeds for {DATASET} - {methods[i]}", leave=False):
+            seed = random.randint(0, 10000)
+            if iteration == 0:
+                seed = 42
+            p_sub = Process(target=process_seed_run,
+                kwargs={
+                    'method_': methods[i],
+                    'new_bloom_': new_bloom,
+                    'results_row_': results_row,
+                    'dataset_': DATASET,
+                    'configuration_': configuration,
+                    'seed_': seed
+                }
+            )
+            p_sub.start()
+            p_sub.join()
+
+
 
     print("Done processing all configurations. Results saved in 'scripts/data_manipulation/seed_runs/' and 'scripts/data_manipulation/avg_selected_configurations.csv'.")
 
