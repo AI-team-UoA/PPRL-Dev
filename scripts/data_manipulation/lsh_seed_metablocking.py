@@ -170,7 +170,7 @@ if __name__ == "__main__":
 
         DATASET = datasets[i]
 
-        if DATASET != "D10":
+        if DATASET == "D10":
             time.sleep(0.5)
             continue
 
