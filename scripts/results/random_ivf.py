@@ -19,8 +19,12 @@ def evaluate_ivf(config_: str, bloom_name: str, loaded_dataframe_, results_: str
                                                        bloom_name=bloom_name,
                                                        loaded_dataframe=loaded_dataframe_)
     faiss = FAISSBlocking(index_type='ivf')
-    absolut_max_nlist = max(1, int(new_bloom.bounds[0] / 39))
-    sqrt_n = math.sqrt(new_bloom.bounds[0])
+
+    new_bloom_index_size = new_bloom.bounds[0] if new_bloom.bounds[0] >= new_bloom.bounds[1] - new_bloom.bounds[0] \
+        else new_bloom.bounds[1] - new_bloom.bounds[0]
+
+    absolut_max_nlist = max(1, int(new_bloom_index_size / 39))
+    sqrt_n = math.sqrt(new_bloom_index_size)
     min_nlist = max(16, int(2 * sqrt_n))
     max_nlist = min(absolut_max_nlist, int(10 * sqrt_n))
 
