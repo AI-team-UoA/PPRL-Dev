@@ -122,7 +122,7 @@ if __name__ == "__main__":
 
         DATASET = datasets[i]
 
-        if DATASET == "D10" and not methods[i] in ['WEP', 'WNP', 'BLAST']:
+        if DATASET != "D10" or  methods[i] in ['WEP', 'WNP', 'BLAST']:
             time.sleep(0.5)
             continue
 
