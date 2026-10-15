@@ -14,6 +14,7 @@ from utils import load_dataframe, config_bloom_filter_with_configuration, datafr
 from privjedai.blocking import  BitBlocker
 from privjedai.block_filtering import BlockPurging, BlockFiltering
 from privjedai.encoded_data import BloomEncodedData
+from privjedai.evaluation import Evaluation
 from privjedai.comparison_cleaning import WeightedEdgePruning, WeightedNodePruning, CardinalityNodePruning, CardinalityEdgePruning, BLAST
 
 
@@ -86,7 +87,7 @@ def process_seed_run(method_, new_bloom_, results_row_, dataset_, configuration_
 
 
 if __name__ == "__main__":
-    df = pd.read_csv("scripts/data_manipulation/metablocking_selected_configurations.csv")
+    df = pd.read_csv("scripts/data_manipulation/new_metablocking_selected_configurations.csv")
 
     original_index = df['Original Row Index'].values
 
@@ -113,6 +114,8 @@ if __name__ == "__main__":
         'Candidate pairs', 'Unique Candidate pairs', 'Runtime', 'Ratio'
     ]
 
+    blast_it = 0
+
     for i, orig_index in tqdm(enumerate(original_index), total=len(original_index), desc="Processing configurations"):
 
 
@@ -122,9 +125,13 @@ if __name__ == "__main__":
 
         DATASET = datasets[i]
 
-        if DATASET == "D10" and not methods[i] in ['WEP', 'WNP', 'BLAST']:
+        if DATASET != "D10" and not methods[i] == 'BLAST':
             time.sleep(0.5)
             continue
+
+        # if DATASET == "D10" and not methods[i] in ['WEP', 'WNP', 'BLAST']:
+        #     time.sleep(0.5)
+        #     continue
 
         # if methods[i] in ['CNP', 'CEP']:
         #     time.sleep(0.5)
@@ -144,6 +151,11 @@ if __name__ == "__main__":
 
 
         for iteration in tqdm(range(10), position=2, total=10, desc=f"Processing seeds for {DATASET} - {methods[i]}", leave=False):
+            if blast_it < 8:
+                blast_it += 1
+                time.sleep(0.5)
+                continue
+
             seed = random.randint(0, 10000)
             if iteration == 0:
                 seed = 42
