@@ -17,3 +17,5 @@ D10,BLAST,0.01,90.91,0.01,358507083,1555.63,CBS,3841,"{'attributes': ['title', '
 D10,BLAST,0.01,92.85,0.01,390394672,1637.04,CBS,4451,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
 D10,BLAST,0.01,91.71,0.01,376953262,1600.76,CBS,5502,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
 D10,BLAST,0.01,91.64,0.01,386980058,1638.62,CBS,5238,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
+D10,BLAST,0.01,92.19,0.01,394997157,1634.21,CBS,1824,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
+D10,BLAST,0.01,90.41,0.01,358620539,1611.83,CBS,409,"{'attributes': ['title', 'starring'], 'size': 256, 'offset': 0, 'num_hashes': 1, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 3}"
