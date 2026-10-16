@@ -1,4 +1,4 @@
-Datase`t,Method,Precision %,Recall %,F1 %,Candidate pairs,Runtime,Weighting Scheme,Seed,Configuration
+Dataset,Method,Precision %,Recall %,F1 %,Candidate pairs,Runtime,Weighting Scheme,Seed,Configuration
 D10,CEP,0.44,53.80,0.87,2729415,191.22,X2,42,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 25, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
 D10,CEP,0.43,52.82,0.84,2752100,196.30,X2,409,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 25, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"
 D10,CEP,0.44,54.40,0.87,2750854,190.44,X2,4506,"{'attributes': ['title', 'starring'], 'size': 512, 'offset': 0, 'num_hashes': 25, 'hashing_type': 'salted_qgrams', 'salt': '', 'qgrams': 2}"

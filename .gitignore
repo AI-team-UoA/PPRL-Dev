@@ -6,6 +6,7 @@ src/privjedai/ray/__pycache__/
 src/privjedai/numba/__pycache__/
 src/pprl.egg-info/
 /scripts/__pycache__
+/scripts/data_manipulation/__pycache__
 /scripts/testing/__pycache__
 /results/__pycache__
 /results/testing/__pycache__
