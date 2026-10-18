@@ -15,7 +15,7 @@ This repository contains the source code, datasets, and experimental outputs cor
 
 ## Environment Setup
 
-To ensure reproducible results, we recommend using `Conda` to manage your virtual environment. This project relies on Python 3.14.
+To ensure reproducible results, we recommend using `Conda` to manage your virtual environment. This project relies on Python 3.10+.
 
 Run the following commands in your terminal to create the environment, activate it, and install the required library:
 
