@@ -20,7 +20,7 @@ To ensure reproducible results, we recommend using `Conda` to manage your virtua
 Run the following commands in your terminal to create the environment, activate it, and install the required library:
 
 ```
-conda create -n ea-env python=3.14 -c conda-forge -y
+conda create -n ea-env python=3.10 -c conda-forge -y
 conda activate ea-env
 pip install privjedai
 ```
